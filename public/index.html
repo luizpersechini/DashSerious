@@ -12,7 +12,13 @@
   <body>
     <div class="appbar">
       <div class="brand">Commodities Dashboard</div>
-      <div class="badge">Base: USD</div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+        <span class="badge">Currency</span>
+        <select id="currency" style="background:#0f1720;color:#e5e7eb;border:1px solid #1f2937;border-radius:8px;padding:6px 8px;">
+          <option value="USD" selected>USD</option>
+          <option value="BRL">BRL</option>
+        </select>
+      </div>
     </div>
     <main class="container">
       <div id="cards"></div>
@@ -70,16 +76,31 @@
         }
         const d = data.data;
         const priceEl = card.querySelector('.price');
-        const nf2 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
-        const nf4 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 });
-        const nf0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+        const curSel = document.getElementById('currency');
+        const cur = curSel && (curSel as any).value ? (curSel as any).value : 'USD';
+        const nfUSD2 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+        const nfUSD4 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 });
+        const nfUSD0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+        const nfBRL2 = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 2 });
+        const nfBRL4 = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 4 });
+        const nfBRL0 = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+        const fmt2 = cur === 'BRL' ? nfBRL2 : nfUSD2;
+        const fmt4 = cur === 'BRL' ? nfBRL4 : nfUSD4;
+        const fmt0 = cur === 'BRL' ? nfBRL0 : nfUSD0;
+
+        const perLb = cur === 'BRL' ? (d.brlPerPound ?? (d.usdPerPound ?? 0) * (d.fxUsdBrl ?? 0)) : (d.usdPerPound ?? 0);
+        const perOz = cur === 'BRL' ? (d.brlPerOunce ?? (d.usdPerOunce ?? 0) * (d.fxUsdBrl ?? 0)) : d.usdPerOunce;
+        const perMt = cur === 'BRL' ? (d.brlPerMetricTon ?? (d.usdPerMetricTon ?? 0) * (d.fxUsdBrl ?? 0)) : (d.usdPerMetricTon ?? 0);
+
         if (key === 'copper' || key === 'nickel') {
-          priceEl.textContent = `USD/lb: ${nf4.format(d.usdPerPound ?? 0)}`;
+          priceEl.textContent = `${cur}/lb: ${fmt4.format(perLb)}`;
         } else if (key === 'cobalt') {
-          priceEl.textContent = `USD/metric ton: ${nf0.format(d.usdPerMetricTon ?? 0)}`;
+          priceEl.textContent = `${cur}/metric ton: ${fmt0.format(perMt)}`;
         } else {
-          priceEl.textContent = `USD/oz: ${nf2.format(d.usdPerOunce)}`;
+          priceEl.textContent = `${cur}/oz: ${fmt2.format(perOz)}`;
         }
+        // expose fx for chart scaling
+        (card as any).dataset.fx = d.fxUsdBrl ? String(d.fxUsdBrl) : '';
         const dt = new Date(d.timestamp);
         u.textContent = `Updated: ${dt.toLocaleString()}`;
 
@@ -99,6 +120,15 @@
           if (tfSel) tfSel.addEventListener('change', () => refreshChart(m.key, card));
           if (perSel) perSel.addEventListener('change', () => refreshChart(m.key, card));
         });
+        const curSel = document.getElementById('currency');
+        if (curSel) curSel.addEventListener('change', () => {
+          const cards = Array.from(document.querySelectorAll('.card')) as HTMLElement[];
+          cards.forEach((cardEl, idx) => {
+            const key = METALS[idx].key;
+            loadMetal(key, cardEl);
+            refreshChart(key, cardEl);
+          });
+        });
       })();
 
       async function refreshChart(key, card) {
@@ -114,7 +144,12 @@
             points = points.slice(-days);
             if (periodicity === 'weekly') points = aggregateWeekly(points);
             else if (periodicity === 'monthly') points = aggregateMonthly(points);
-            renderSpark(card.querySelector('.spark'), points.map(p => p.v));
+            // scale to BRL if selected
+            const curSel = document.getElementById('currency');
+            const cur = curSel && (curSel as any).value ? (curSel as any).value : 'USD';
+            const fx = Number((card as any).dataset.fx || '0');
+            const scaled = (cur === 'BRL' && fx > 0) ? points.map(p => ({ t: p.t, v: p.v * fx })) : points;
+            renderSpark(card.querySelector('.spark'), scaled);
           }
         } catch (e) { /* ignore */ }
       }
@@ -153,17 +188,49 @@
         }
         return out;
       }
-      function renderSpark(svg, values) {
-        if (!values || values.length < 2) { svg.innerHTML = ''; return; }
+      function renderSpark(svg, points) {
+        if (!points || points.length < 2) { svg.innerHTML = ''; return; }
+        const W = 100, H = 28, PAD_L = 6, PAD_R = 2, PAD_T = 2, PAD_B = 10;
+        const values = points.map(p => p.v);
+        const times = points.map(p => p.t);
         const min = Math.min(...values);
         const max = Math.max(...values);
         const span = max - min || 1;
-        const pts = values.map((v, i) => {
-          const x = (i / (values.length - 1)) * 100;
-          const y = 28 - ((v - min) / span) * 28;
-          return `${x},${y}`;
-        }).join(' ');
+        const toX = i => PAD_L + (i / (values.length - 1)) * (W - PAD_L - PAD_R);
+        const toY = v => H - PAD_B - ((v - min) / span) * (H - PAD_T - PAD_B);
+        const pts = values.map((v, i) => `${toX(i)},${toY(v)}`).join(' ');
+
+        // Build ticks (max 5 x-ticks, 4 y-ticks)
+        const xTickCount = Math.min(5, values.length);
+        const xStep = Math.max(1, Math.floor((values.length - 1) / (xTickCount - 1)));
+        const yTickCount = 4;
+        const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+        const rangeMs = (times[times.length - 1] - times[0]) || (1000 * 60 * 60 * 24);
+        const longRange = rangeMs > 200 * 24 * 60 * 60 * 1000;
+
+        let xTicks = '';
+        for (let i = 0; i < values.length; i += xStep) {
+          const x = toX(i);
+          const d = new Date(times[i]);
+          const label = longRange
+            ? d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
+            : d.toLocaleDateString(undefined, { month: 'short', day: '2-digit' }).replace(/\s0/, ' ');
+          xTicks += `<line x1="${x}" y1="${H-PAD_B}" x2="${x}" y2="${H-PAD_B+2}" class="axis" />`;
+          xTicks += `<text x="${x}" y="${H-1}" text-anchor="middle" class="axis">${label}</text>`;
+        }
+
+        let yTicks = '';
+        for (let j = 0; j <= yTickCount; j++) {
+          const v = min + (j / yTickCount) * span;
+          const y = toY(v);
+          yTicks += `<line x1="${PAD_L-2}" y1="${y}" x2="${PAD_L}" y2="${y}" class="axis" />`;
+        }
+
         svg.innerHTML = `
+          <g class="grid">
+            <line x1="${PAD_L}" y1="${H-PAD_B}" x2="${W-PAD_R}" y2="${H-PAD_B}" />
+          </g>
+          <g class="axis">${xTicks}${yTicks}</g>
           <polyline points="${pts}" fill="none" stroke="url(#g)" stroke-width="1.5" />
           <defs>
             <linearGradient id="g" x1="0" x2="1" y1="0" y2="0">

@@ -82,8 +82,8 @@ body {
   font-size: 0.85rem;
 }
 .chart {
-  width: 120%;
-  height: 180px;
+  width: 100    %;
+  height: 150px;
 }
 
 .axis text, text.axis { font-size: 2.5px; fill: var(--muted); opacity: 0.8; }
