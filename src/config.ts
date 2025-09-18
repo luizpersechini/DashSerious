@@ -21,6 +21,9 @@ loadEnv();
 export const config = {
 	metalpriceApiKey: process.env.METALPRICE_API_KEY || "",
 	metalpriceApiBase: process.env.METALPRICE_API_BASE || "https://api.metalpriceapi.com/v1",
+	metalpricePlan: (process.env.METALPRICE_PLAN || "essential").toLowerCase(),
+	metalpriceMonthlyQuota: Number(process.env.METALPRICE_MONTHLY_QUOTA || "1000"),
+	manualRefreshMinutes: process.env.METALPRICE_REFRESH_MINUTES ? Number(process.env.METALPRICE_REFRESH_MINUTES) : undefined,
 };
 
 export function assertConfig() {

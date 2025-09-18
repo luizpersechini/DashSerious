@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "node:path";
 import { MetalpriceClient } from "./metalpriceClient.js";
+import { config } from "./config.js";
 
 type MetalCache = {
 	usdPerOunce: number;
@@ -17,7 +18,29 @@ app.use(cors());
 
 const client = new MetalpriceClient();
 const MIN_REFRESH_MS = 60 * 1000; // 1 minute baseline minimum
-const REFRESH_INTERVAL_MS = 45 * 60 * 1000; // plan-aware interval: ~45 minutes for Essential (<= ~960 requests/month)
+function resolvePlanRefreshMs(): number {
+  if (config.manualRefreshMinutes && config.manualRefreshMinutes > 0) {
+    return config.manualRefreshMinutes * 60 * 1000;
+  }
+  // Defaults per plan based on docs (approx):
+  // Essential: 30 min; Basic: 10 min; Basic Plus/Pro: 60s; Pro Plus: 30s; Business: 15s
+  switch (config.metalpricePlan) {
+    case "business":
+      return 15 * 1000;
+    case "professionalplus":
+    case "proplus":
+      return 30 * 1000;
+    case "professional":
+    case "basicplus":
+      return 60 * 1000;
+    case "basic":
+      return 10 * 60 * 1000;
+    case "essential":
+    default:
+      return 30 * 60 * 1000;
+  }
+}
+const REFRESH_INTERVAL_MS = resolvePlanRefreshMs();
 
 // Ounce-to-gram conversion: precious metals use troy ounces; others use avoirdupois ounces
 const TROY_OUNCE_GRAMS = 31.1034768;
