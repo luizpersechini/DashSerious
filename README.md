@@ -31,7 +31,7 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
 
 ### Charts & Refresh Strategy
 
-- Multi-symbol fetch every ~45 minutes to fit Essential plan (≤960 req/mo)
+- Multi-symbol fetch cadence is plan-aware (auto-set based on your subscription)
 - In-memory time series buffer per metal (`/api/:metal/timeseries?limit=N`)
 - One-time historical seed: 360 days via timeframe endpoint
 - Lightweight SVG chart with minimal axes and date labels; values are the same units as the card; BRL card shows USD→BRL FX
@@ -66,6 +66,26 @@ METALPRICE_API_BASE=https://api.metalpriceapi.com/v1
 npm run dev
 ```
 Visit `http://localhost:3000`.
+
+#### Configure refresh cadence by plan (Essential ~30m)
+
+The server auto-sets refresh based on your plan, and you can override it.
+
+- Supported plans (case-insensitive): `essential`, `basic`, `basicplus`, `professional`, `professionalplus`, `business`.
+- Defaults used:
+  - Essential: 30 minutes
+  - Basic: 10 minutes
+  - Basic Plus / Professional: 60 seconds
+  - Professional Plus: 30 seconds
+  - Business: 15 seconds
+
+To configure via `.env`:
+
+```
+METALPRICE_PLAN=essential
+# Optional manual override (minutes) – takes precedence over plan
+# METALPRICE_REFRESH_MINUTES=30
+```
 
 5. Build and run
 ```bash
