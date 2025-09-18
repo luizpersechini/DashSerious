@@ -8,10 +8,6 @@ type MetalCache = {
 	usdPerGram: number;
 	usdPerPound?: number;
 	usdPerMetricTon?: number;
-	brlPerOunce?: number;
-	brlPerGram?: number;
-	brlPerPound?: number;
-	brlPerMetricTon?: number;
 	fxUsdBrl?: number;
 	timestamp: number;
 };
@@ -41,29 +37,28 @@ async function refreshSymbolCache(symbol: string) {
 	const last = lastFetchBySymbol.get(symbol) ?? 0;
 	if (caches.has(symbol) && now - last < MIN_REFRESH_MS) return;
 
-	const resp = await client.fetchLatest({ base: "USD", currencies: [symbol, "BRL"] });
+	const resp = await client.fetchLatest({ base: "USD", currencies: [symbol] });
 	if (!resp.success || !resp.rates || resp.rates[symbol] == null) {
 		throw new Error(`Failed to fetch ${symbol}: ${resp.error?.code} ${resp.error?.info}`);
 	}
-	const unitsPerUsd = resp.rates[symbol]; // how many units of metal per 1 USD
+	const unitsPerUsd = resp.rates[symbol]; // how many units of symbol per 1 USD
+
+	if (symbol === "BRL") {
+		const base: MetalCache = { usdPerOunce: 0, usdPerGram: 0, fxUsdBrl: unitsPerUsd, timestamp: now };
+		caches.set(symbol, base);
+		lastFetchBySymbol.set(symbol, now);
+		return;
+	}
 	const usdPerOunce = 1 / unitsPerUsd;
 	const gramsPerOunce = PRECIOUS.has(symbol) ? TROY_OUNCE_GRAMS : OUNCE_GRAMS;
 	const usdPerGram = usdPerOunce / gramsPerOunce;
 
-	const fxUsdBrl = (resp.rates as any).BRL as number | undefined;
 	const base: MetalCache = { usdPerOunce, usdPerGram, timestamp: now };
 	if (symbol === "XCU" || symbol === "NI") {
 		base.usdPerPound = usdPerGram * POUND_GRAMS;
 	}
 	if (symbol === "XCO") {
 		base.usdPerMetricTon = usdPerGram * METRIC_TON_GRAMS;
-	}
-	if (fxUsdBrl) {
-		base.brlPerOunce = usdPerOunce * fxUsdBrl;
-		base.brlPerGram = usdPerGram * fxUsdBrl;
-		if (base.usdPerPound != null) base.brlPerPound = base.usdPerPound * fxUsdBrl;
-		if (base.usdPerMetricTon != null) base.brlPerMetricTon = base.usdPerMetricTon * fxUsdBrl;
-		base.fxUsdBrl = fxUsdBrl;
 	}
 
 	caches.set(symbol, base);
@@ -73,15 +68,26 @@ async function refreshSymbolCache(symbol: string) {
 async function refreshAllSymbols() {
 	const now = Date.now();
 	const symbols = TRACKED.map(([sym]) => sym);
-	const resp = await client.fetchLatest({ base: "USD", currencies: [...symbols, "BRL"] });
+	const resp = await client.fetchLatest({ base: "USD", currencies: symbols });
 	if (!resp.success || !resp.rates) {
 		throw new Error(`Failed multi fetch: ${resp.error?.code} ${resp.error?.info}`);
 	}
-	const fxUsdBrl = (resp.rates as any).BRL as number | undefined;
 	for (const symbol of symbols) {
 		const rate = resp.rates[symbol as keyof typeof resp.rates];
 		if (rate == null) continue;
 		const unitsPerUsd = rate;
+		if (symbol === "BRL") {
+			const base: MetalCache = { usdPerOunce: 0, usdPerGram: 0, fxUsdBrl: unitsPerUsd, timestamp: now };
+			caches.set(symbol, base);
+			lastFetchBySymbol.set(symbol, now);
+			const arr = timeseriesBySymbol.get(symbol) ?? [];
+			if (arr.length === 0 || now - arr[arr.length - 1].t > 60 * 1000) {
+				arr.push({ t: now, v: unitsPerUsd });
+				if (arr.length > MAX_SERIES_POINTS) arr.splice(0, arr.length - MAX_SERIES_POINTS);
+				timeseriesBySymbol.set(symbol, arr);
+			}
+			continue;
+		}
 		const usdPerOunce = 1 / unitsPerUsd;
 		const gramsPerOunce = PRECIOUS.has(symbol) ? TROY_OUNCE_GRAMS : OUNCE_GRAMS;
 		const usdPerGram = usdPerOunce / gramsPerOunce;
@@ -92,13 +98,6 @@ async function refreshAllSymbols() {
 		}
 		if (symbol === "XCO") {
 			base.usdPerMetricTon = usdPerGram * METRIC_TON_GRAMS;
-		}
-		if (fxUsdBrl) {
-			base.brlPerOunce = usdPerOunce * fxUsdBrl;
-			base.brlPerGram = usdPerGram * fxUsdBrl;
-			if (base.usdPerPound != null) base.brlPerPound = base.usdPerPound * fxUsdBrl;
-			if (base.usdPerMetricTon != null) base.brlPerMetricTon = base.usdPerMetricTon * fxUsdBrl;
-			base.fxUsdBrl = fxUsdBrl;
 		}
 		caches.set(symbol, base);
 		lastFetchBySymbol.set(symbol, now);
@@ -117,6 +116,7 @@ async function refreshAllSymbols() {
 function getDisplayValue(symbol: string, cache: MetalCache): number {
 	if (symbol === "XCU" || symbol === "NI") return cache.usdPerPound ?? 0;
 	if (symbol === "XCO") return cache.usdPerMetricTon ?? 0;
+	if (symbol === "BRL") return cache.fxUsdBrl ?? 0;
 	return cache.usdPerOunce;
 }
 
@@ -154,6 +154,7 @@ const TRACKED: Array<[string, string]> = [
 	["XCU", "copper"],
 	["NI", "nickel"],
 	["XCO", "cobalt"],
+	["BRL", "brl"],
 ];
 
 for (const [sym, name] of TRACKED) routeFor(sym, name);
@@ -188,6 +189,12 @@ setInterval(() => {
 			for (const symbol of symbols) {
 				const unitsPerUsd = dayRates[symbol as keyof typeof dayRates];
 				if (unitsPerUsd == null) continue;
+				if (symbol === "BRL") {
+					const arr = timeseriesBySymbol.get(symbol) ?? [];
+					arr.push({ t, v: unitsPerUsd });
+					timeseriesBySymbol.set(symbol, arr);
+					continue;
+				}
 				const usdPerOunce = 1 / unitsPerUsd;
 				const gramsPerOunce = PRECIOUS.has(symbol) ? TROY_OUNCE_GRAMS : OUNCE_GRAMS;
 				const usdPerGram = usdPerOunce / gramsPerOunce;
