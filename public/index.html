@@ -93,6 +93,11 @@
           loadMetal(m.key, card).catch(err => {
             card.querySelector('.updated').textContent = String(err);
           });
+          // Wire up controls to update chart on change
+          const tfSel = card.querySelector('.tf');
+          const perSel = card.querySelector('.per');
+          if (tfSel) tfSel.addEventListener('change', () => refreshChart(m.key, card));
+          if (perSel) perSel.addEventListener('change', () => refreshChart(m.key, card));
         });
       })();
 
