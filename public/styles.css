@@ -66,6 +66,7 @@ body {
 
 .title { font-weight: 600; margin: 0 0 8px; color: var(--text); opacity: 0.95; }
 .value.price { font-size: 2rem; font-variant-numeric: tabular-nums; }
+.price .unit { font-size: 0.6em; color: var(--muted); margin-left: 6px; }
 .muted { color: var(--muted); }
 .updated { margin-top: 8px; font-size: 0.9rem; }
 

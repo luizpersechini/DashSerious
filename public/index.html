@@ -74,13 +74,13 @@
         if (key === 'brl') {
           const fx = d.fxUsdBrl ?? 0;
           const fxFmt = new Intl.NumberFormat('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-          priceEl.textContent = `USD/BRL: ${fxFmt.format(fx)}`;
+          priceEl.innerHTML = `${fxFmt.format(fx)} <span class="unit">USD/BRL</span>`;
         } else if (key === 'copper' || key === 'nickel') {
-          priceEl.textContent = `USD/lb: ${nf4.format(d.usdPerPound ?? 0)}`;
+          priceEl.innerHTML = `${nf4.format(d.usdPerPound ?? 0)} <span class="unit">USD/lb</span>`;
         } else if (key === 'cobalt') {
-          priceEl.textContent = `USD/ton: ${nf0.format(d.usdPerMetricTon ?? 0)}`;
+          priceEl.innerHTML = `${nf0.format(d.usdPerMetricTon ?? 0)} <span class="unit">USD/ton</span>`;
         } else {
-          priceEl.textContent = `USD/oz: ${nf2.format(d.usdPerOunce)}`;
+          priceEl.innerHTML = `${nf2.format(d.usdPerOunce)} <span class="unit">USD/oz</span>`;
         }
         const dt = new Date(d.timestamp);
         const top = document.getElementById('lastUpdated');
