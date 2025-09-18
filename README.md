@@ -30,15 +30,17 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
 ### Charts & Refresh Strategy
 
 - Multi-symbol fetch every ~45 minutes to fit Essential plan (≤960 req/mo)
-- In-memory time series buffer per metal (`/api/:metal/timeseries?limit=60`)
-- Lightweight SVG sparkline on each card; values are the same units as shown on the card
+- In-memory time series buffer per metal (`/api/:metal/timeseries?limit=N`)
+- One-time historical seed: 360 days via timeframe endpoint
+- Lightweight SVG chart with minimal axes and date labels; values use the same units as the card
 
 ### UI / Styling
 
-- Dark theme with gradient background and sleek cards
+- Dark theme with gradient background and sleek, larger cards
 - Per-metal accent colors on card headers (gold/silver/platinum/palladium/copper/nickel/cobalt)
 - Inter font loaded from Google Fonts
 - Locale-aware number formatting via `Intl.NumberFormat` for clean currency display
+- X-axis labels are compact (e.g., `Sep 07` or `Sep '25`); font-size configurable in CSS
 
 ## Getting Started
 
@@ -62,6 +64,13 @@ METALPRICE_API_BASE=https://api.metalpriceapi.com/v1
 npm run dev
 ```
 Visit `http://localhost:3000`.
+
+### Chart Controls
+
+- Timeframe selector: 30d, 90d, 180d, 360d (defaults to 360d)
+- Periodicity selector: Daily, Weekly (avg), Monthly (avg)
+- X-axis font size can be customized at:
+  - `public/styles.css` → `.axis text, text.axis { font-size: 3px; ... }`
 
 5. Build and run
 ```bash
