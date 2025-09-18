@@ -34,11 +34,11 @@ body {
 .appbar .brand { font-weight: 700; letter-spacing: 0.3px; }
 .appbar .badge { color: var(--muted); font-size: 0.9rem; }
 
-.container { max-width: 1200px; margin: 22px auto; padding: 0 16px; }
+.container { max-width: 1400px; margin: 12px auto; padding: 0 10px; }
 
 #cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
   gap: 18px;
 }
 
@@ -47,7 +47,7 @@ body {
   background: linear-gradient(180deg, var(--card), #101720);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 18px;
+  padding: 22px;
   box-shadow: 0 10px 24px rgba(0,0,0,0.35);
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
@@ -62,7 +62,7 @@ body {
 .card:hover { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(0,0,0,0.45); }
 
 .title { font-weight: 600; margin: 0 0 8px; color: var(--text); opacity: 0.95; }
-.value.price { font-size: 1.8rem; font-variant-numeric: tabular-nums; }
+.value.price { font-size: 2rem; font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
 .updated { margin-top: 8px; font-size: 0.9rem; }
 
@@ -82,9 +82,14 @@ body {
   font-size: 0.85rem;
 }
 .chart {
-  width: 100%;
-  height: 96px;
+  width: 120%;
+  height: 180px;
 }
+
+.axis text, text.axis { font-size: 2.5px; fill: var(--muted); opacity: 0.8; }
+.axis line { stroke: var(--border); stroke-width: 1; opacity: 0.7; }
+.grid line { stroke: var(--border); stroke-width: 1; opacity: 0.4; }
+.unit-label { font-size: 11px; fill: var(--muted); }
 
 @media (max-width: 480px) {
   .container { margin: 12px auto; }
@@ -99,5 +104,6 @@ body {
 .card.metal-copper  { --accent-a: #f97316; --accent-b: #fb923c; --accent-c: #fdba74; }
 .card.metal-nickel  { --accent-a: #22c55e; --accent-b: #86efac; --accent-c: #34d399; }
 .card.metal-cobalt  { --accent-a: #3b82f6; --accent-b: #60a5fa; --accent-c: #93c5fd; }
+
 
 
