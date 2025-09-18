@@ -149,7 +149,7 @@ setInterval(() => {
 (async function seedHistory() {
 	try {
 		const end = new Date();
-		const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+		const start = new Date(end.getTime() - 360 * 24 * 60 * 60 * 1000);
 		const fmt = (d: Date) => d.toISOString().slice(0, 10);
 		const symbols = TRACKED.map(([s]) => s);
 		const tf = await client.fetchTimeframe({

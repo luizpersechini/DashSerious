@@ -39,6 +39,20 @@
         div.innerHTML = `
           <div class="title">${title}</div>
           <div class="value price">—</div>
+          <div class="controls">
+            <label class="muted" style="margin-right:auto">Chart</label>
+            <select class="tf">
+              <option value="30">30d</option>
+              <option value="90">90d</option>
+              <option value="180">180d</option>
+              <option value="360" selected>360d</option>
+            </select>
+            <select class="per">
+              <option value="daily" selected>Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
           <svg class="spark chart" viewBox="0 0 100 28" preserveAspectRatio="none"></svg>
           <div class="muted updated" style="margin-top:8px;">Loading…</div>
         `;
@@ -83,14 +97,56 @@
       })();
 
       async function refreshChart(key, card) {
-        const limit = 120;
+        const days = Number(card.querySelector('.tf').value) || 360;
+        const periodicity = String(card.querySelector('.per')?.value || 'daily');
         try {
-          const ts = await fetch(`/api/${key}/timeseries?limit=${limit}`).then(r => r.json());
+          const ts = await fetch(`/api/${key}/timeseries?limit=${days + 5}`).then(r => r.json());
           if (ts.success) {
-            const values = ts.data.points.map(p => p.v);
-            renderSpark(card.querySelector('.spark'), values);
+            let points = ts.data.points;
+            // Ensure ascending by time
+            points = points.sort((a, b) => a.t - b.t);
+            // Cut to last N days
+            points = points.slice(-days);
+            if (periodicity === 'weekly') points = aggregateWeekly(points);
+            else if (periodicity === 'monthly') points = aggregateMonthly(points);
+            renderSpark(card.querySelector('.spark'), points.map(p => p.v));
           }
         } catch (e) { /* ignore */ }
+      }
+      function startOfDay(ts) { const d = new Date(ts); d.setHours(0,0,0,0); return d.getTime(); }
+      function startOfWeek(ts) {
+        const d = new Date(startOfDay(ts));
+        const day = d.getDay(); // 0=Sun
+        const diff = (day + 6) % 7; // make Monday start
+        d.setDate(d.getDate() - diff);
+        return d.getTime();
+      }
+      function startOfMonth(ts) { const d = new Date(startOfDay(ts)); d.setDate(1); return d.getTime(); }
+      function aggregateWeekly(points) {
+        const map = new Map();
+        for (const p of points) {
+          const k = startOfWeek(p.t);
+          const arr = map.get(k) || []; arr.push(p.v); map.set(k, arr);
+        }
+        const out = [];
+        for (const [k, arr] of Array.from(map.entries()).sort((a,b)=>a[0]-b[0])) {
+          const avg = arr.reduce((s,x)=>s+x,0)/arr.length;
+          out.push({ t: Number(k), v: avg });
+        }
+        return out;
+      }
+      function aggregateMonthly(points) {
+        const map = new Map();
+        for (const p of points) {
+          const k = startOfMonth(p.t);
+          const arr = map.get(k) || []; arr.push(p.v); map.set(k, arr);
+        }
+        const out = [];
+        for (const [k, arr] of Array.from(map.entries()).sort((a,b)=>a[0]-b[0])) {
+          const avg = arr.reduce((s,x)=>s+x,0)/arr.length;
+          out.push({ t: Number(k), v: avg });
+        }
+        return out;
       }
       function renderSpark(svg, values) {
         if (!values || values.length < 2) { svg.innerHTML = ''; return; }
