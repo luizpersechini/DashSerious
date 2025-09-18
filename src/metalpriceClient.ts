@@ -8,6 +8,15 @@ export type LatestRatesResponse = {
 	error?: { code: number; info: string };
 };
 
+export type TimeframeResponse = {
+	success: boolean;
+	base?: string;
+	start_date?: string;
+	end_date?: string;
+	rates?: Record<string, Record<string, number>>; // date -> { SYMBOL: rate }
+	error?: { code: number; info: string };
+};
+
 export class MetalpriceClient {
 	private readonly baseUrl: string;
 	private readonly apiKey: string;
@@ -38,6 +47,30 @@ export class MetalpriceClient {
 			},
 		});
 		const data = (await res.json()) as LatestRatesResponse;
+		return data;
+	}
+
+	async fetchTimeframe(params: {
+		start_date: string; // YYYY-MM-DD
+		end_date: string; // YYYY-MM-DD
+		base?: string;
+		currencies?: string[];
+	}): Promise<TimeframeResponse> {
+		const url = new URL(`${this.baseUrl}/timeframe`);
+		url.searchParams.set("api_key", this.apiKey);
+		url.searchParams.set("start_date", params.start_date);
+		url.searchParams.set("end_date", params.end_date);
+		if (params.base) url.searchParams.set("base", params.base);
+		if (params.currencies && params.currencies.length > 0) {
+			url.searchParams.set("currencies", params.currencies.join(","));
+		}
+		const res = await fetch(url.toString(), {
+			headers: {
+				"Content-Type": "application/json",
+				"X-API-KEY": this.apiKey,
+			},
+		});
+		const data = (await res.json()) as TimeframeResponse;
 		return data;
 	}
 }

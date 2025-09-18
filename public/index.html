@@ -27,6 +27,7 @@
         { name: 'Copper', key: 'copper', symbol: 'XCU' },
         { name: 'Nickel', key: 'nickel', symbol: 'NI' },
         { name: 'Cobalt', key: 'cobalt', symbol: 'XCO' },
+        { name: 'USD/BRL', key: 'brl', symbol: 'BRL' },
       ];
 
       function createCard(el, title, metalKey) {
@@ -39,6 +40,21 @@
         div.innerHTML = `
           <div class="title">${title}</div>
           <div class="value price">—</div>
+          <div class="controls">
+            <label class="muted" style="margin-right:auto">Chart</label>
+            <select class="tf">
+              <option value="30">30d</option>
+              <option value="90">90d</option>
+              <option value="180">180d</option>
+              <option value="360" selected>360d</option>
+            </select>
+            <select class="per">
+              <option value="daily" selected>Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <svg class="spark chart" viewBox="0 0 100 28" preserveAspectRatio="none"></svg>
           <div class="muted updated" style="margin-top:8px;">Loading…</div>
         `;
         el.appendChild(div);
@@ -58,15 +74,21 @@
         const nf2 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
         const nf4 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 });
         const nf0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-        if (key === 'copper' || key === 'nickel') {
+        if (key === 'brl') {
+          const fx = d.fxUsdBrl ?? 0;
+          const fxFmt = new Intl.NumberFormat('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+          priceEl.textContent = `USD/BRL: ${fxFmt.format(fx)}`;
+        } else if (key === 'copper' || key === 'nickel') {
           priceEl.textContent = `USD/lb: ${nf4.format(d.usdPerPound ?? 0)}`;
         } else if (key === 'cobalt') {
-          priceEl.textContent = `USD/metric ton: ${nf0.format(d.usdPerMetricTon ?? 0)}`;
+          priceEl.textContent = `USD/ton: ${nf0.format(d.usdPerMetricTon ?? 0)}`;
         } else {
           priceEl.textContent = `USD/oz: ${nf2.format(d.usdPerOunce)}`;
         }
         const dt = new Date(d.timestamp);
         u.textContent = `Updated: ${dt.toLocaleString()}`;
+
+        await refreshChart(key, card);
       }
 
       (function init() {
@@ -76,8 +98,118 @@
           loadMetal(m.key, card).catch(err => {
             card.querySelector('.updated').textContent = String(err);
           });
+          // Wire up controls to update chart on change
+          const tfSel = card.querySelector('.tf');
+          const perSel = card.querySelector('.per');
+          if (tfSel) tfSel.addEventListener('change', () => refreshChart(m.key, card));
+          if (perSel) perSel.addEventListener('change', () => refreshChart(m.key, card));
         });
       })();
+
+      async function refreshChart(key, card) {
+        const days = Number(card.querySelector('.tf').value) || 360;
+        const periodicity = String(card.querySelector('.per')?.value || 'daily');
+        try {
+          const ts = await fetch(`/api/${key}/timeseries?limit=${days + 5}`).then(r => r.json());
+          if (ts.success) {
+            let points = ts.data.points;
+            // Ensure ascending by time
+            points = points.sort((a, b) => a.t - b.t);
+            // Cut to last N days
+            points = points.slice(-days);
+            if (periodicity === 'weekly') points = aggregateWeekly(points);
+            else if (periodicity === 'monthly') points = aggregateMonthly(points);
+            renderSpark(card.querySelector('.spark'), points);
+          }
+        } catch (e) { /* ignore */ }
+      }
+      function startOfDay(ts) { const d = new Date(ts); d.setHours(0,0,0,0); return d.getTime(); }
+      function startOfWeek(ts) {
+        const d = new Date(startOfDay(ts));
+        const day = d.getDay(); // 0=Sun
+        const diff = (day + 6) % 7; // make Monday start
+        d.setDate(d.getDate() - diff);
+        return d.getTime();
+      }
+      function startOfMonth(ts) { const d = new Date(startOfDay(ts)); d.setDate(1); return d.getTime(); }
+      function aggregateWeekly(points) {
+        const map = new Map();
+        for (const p of points) {
+          const k = startOfWeek(p.t);
+          const arr = map.get(k) || []; arr.push(p.v); map.set(k, arr);
+        }
+        const out = [];
+        for (const [k, arr] of Array.from(map.entries()).sort((a,b)=>a[0]-b[0])) {
+          const avg = arr.reduce((s,x)=>s+x,0)/arr.length;
+          out.push({ t: Number(k), v: avg });
+        }
+        return out;
+      }
+      function aggregateMonthly(points) {
+        const map = new Map();
+        for (const p of points) {
+          const k = startOfMonth(p.t);
+          const arr = map.get(k) || []; arr.push(p.v); map.set(k, arr);
+        }
+        const out = [];
+        for (const [k, arr] of Array.from(map.entries()).sort((a,b)=>a[0]-b[0])) {
+          const avg = arr.reduce((s,x)=>s+x,0)/arr.length;
+          out.push({ t: Number(k), v: avg });
+        }
+        return out;
+      }
+      function renderSpark(svg, points) {
+        if (!points || points.length < 2) { svg.innerHTML = ''; return; }
+        const W = 100, H = 28, PAD_L = 6, PAD_R = 2, PAD_T = 2, PAD_B = 10;
+        const values = points.map(p => p.v);
+        const times = points.map(p => p.t);
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const span = max - min || 1;
+        const toX = i => PAD_L + (i / (values.length - 1)) * (W - PAD_L - PAD_R);
+        const toY = v => H - PAD_B - ((v - min) / span) * (H - PAD_T - PAD_B);
+        const pts = values.map((v, i) => `${toX(i)},${toY(v)}`).join(' ');
+
+        // Build ticks (max 5 x-ticks, 4 y-ticks)
+        const xTickCount = Math.min(5, values.length);
+        const xStep = Math.max(1, Math.floor((values.length - 1) / (xTickCount - 1)));
+        const yTickCount = 4;
+        const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+        const rangeMs = (times[times.length - 1] - times[0]) || (1000 * 60 * 60 * 24);
+        const longRange = rangeMs > 200 * 24 * 60 * 60 * 1000;
+
+        let xTicks = '';
+        for (let i = 0; i < values.length; i += xStep) {
+          const x = toX(i);
+          const d = new Date(times[i]);
+          const label = longRange
+            ? d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
+            : d.toLocaleDateString(undefined, { month: 'short', day: '2-digit' }).replace(/\s0/, ' ');
+          xTicks += `<line x1="${x}" y1="${H-PAD_B}" x2="${x}" y2="${H-PAD_B+2}" class="axis" />`;
+          xTicks += `<text x="${x}" y="${H-1}" text-anchor="middle" class="axis">${label}</text>`;
+        }
+
+        let yTicks = '';
+        for (let j = 0; j <= yTickCount; j++) {
+          const v = min + (j / yTickCount) * span;
+          const y = toY(v);
+          yTicks += `<line x1="${PAD_L-2}" y1="${y}" x2="${PAD_L}" y2="${y}" class="axis" />`;
+        }
+
+        svg.innerHTML = `
+          <g class="grid">
+            <line x1="${PAD_L}" y1="${H-PAD_B}" x2="${W-PAD_R}" y2="${H-PAD_B}" />
+          </g>
+          <g class="axis">${xTicks}${yTicks}</g>
+          <polyline points="${pts}" fill="none" stroke="url(#g)" stroke-width="1.5" />
+          <defs>
+            <linearGradient id="g" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0%" stop-color="var(--accent-a)" />
+              <stop offset="50%" stop-color="var(--accent-b)" />
+              <stop offset="100%" stop-color="var(--accent-c)" />
+            </linearGradient>
+          </defs>`;
+      }
     </script>
   </body>
   </html>
