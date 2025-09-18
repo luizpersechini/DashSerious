@@ -5,7 +5,7 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
 ## Overview
 
 - Backend: Express server that fetches MetalpriceAPI, caches results, and serves a small API + static page.
-- Frontend: Simple static HTML page with cards for each metal.
+- Frontend: Static HTML page with responsive grid cards and dark trading-desk look.
 - Data Provider: MetalpriceAPI (`/latest`) with API key auth.
 
 ## Features
@@ -25,6 +25,14 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
 - Static page at `/` shows one price per metal:
   - Copper/Nickel: USD/lb (4 decimals)
   - Others: USD/oz (2 decimals)
+  - Cobalt: USD/metric ton (no decimals)
+
+### UI / Styling
+
+- Dark theme with gradient background and sleek cards
+- Per-metal accent colors on card headers (gold/silver/platinum/palladium/copper/nickel/cobalt)
+- Inter font loaded from Google Fonts
+- Locale-aware number formatting via `Intl.NumberFormat` for clean currency display
 
 ## Getting Started
 
@@ -72,6 +80,7 @@ npm run start
   - Avoirdupois ounce: 28.349523125 g
   - Pound: 453.59237 g
 - Refresh interval is set to 60 seconds by default.
+- Cobalt additionally exposes USD/metric ton on the API and UI
 
 ## References
 

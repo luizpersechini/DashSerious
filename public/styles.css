@@ -1,0 +1,83 @@
+:root {
+  --bg: #0b0f14;
+  --panel: #0e131a;
+  --card: #141a22;
+  --border: #1f2937;
+  --text: #e5e7eb;
+  --muted: #94a3b8;
+  --accent-a: #22d3ee;
+  --accent-b: #22c55e;
+  --accent-c: #eab308;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: radial-gradient(1200px 800px at 10% -10%, #0f1620 0%, var(--bg) 60%), var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 20px;
+  background: linear-gradient(180deg, #101722 0%, #0c121b 100%);
+  border-bottom: 1px solid var(--border);
+}
+.appbar .brand { font-weight: 700; letter-spacing: 0.3px; }
+.appbar .badge { color: var(--muted); font-size: 0.9rem; }
+
+.container { max-width: 1200px; margin: 22px auto; padding: 0 16px; }
+
+#cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  position: relative;
+  background: linear-gradient(180deg, var(--card), #101720);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.card::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 0; height: 3px;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(90deg, var(--accent-a), var(--accent-b), var(--accent-c));
+  opacity: 0.6;
+}
+.card:hover { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(0,0,0,0.45); }
+
+.title { font-weight: 600; margin: 0 0 8px; color: var(--text); opacity: 0.95; }
+.value.price { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.updated { margin-top: 6px; font-size: 0.88rem; }
+
+@media (max-width: 480px) {
+  .container { margin: 12px auto; }
+  .value.price { font-size: 1.4rem; }
+}
+
+/* Per-metal accents (override gradient vars per card) */
+.card.metal-gold    { --accent-a: #f59e0b; --accent-b: #fbbf24; --accent-c: #fde047; }
+.card.metal-silver  { --accent-a: #94a3b8; --accent-b: #cbd5e1; --accent-c: #e5e7eb; }
+.card.metal-platinum{ --accent-a: #a1a1aa; --accent-b: #d4d4d8; --accent-c: #e4e4e7; }
+.card.metal-palladium{ --accent-a: #60a5fa; --accent-b: #22d3ee; --accent-c: #93c5fd; }
+.card.metal-copper  { --accent-a: #f97316; --accent-b: #fb923c; --accent-c: #fdba74; }
+.card.metal-nickel  { --accent-a: #22c55e; --accent-b: #86efac; --accent-c: #34d399; }
+.card.metal-cobalt  { --accent-a: #3b82f6; --accent-b: #60a5fa; --accent-c: #93c5fd; }
+
+
