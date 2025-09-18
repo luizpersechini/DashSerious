@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Commodities Dashboard</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
+      .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; max-width: 360px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+      .title { font-weight: 600; margin-bottom: 8px; }
+      .value { font-size: 1.25rem; margin: 4px 0; }
+      .muted { color: #6b7280; font-size: 0.9rem; }
+    </style>
+  </head>
+  <body>
+    <div id="cards"></div>
+
+    <script>
+      const METALS = [
+        { name: 'Gold', key: 'gold', symbol: 'XAU' },
+        { name: 'Silver', key: 'silver', symbol: 'XAG' },
+        { name: 'Platinum', key: 'platinum', symbol: 'XPT' },
+        { name: 'Palladium', key: 'palladium', symbol: 'XPD' },
+        { name: 'Copper', key: 'copper', symbol: 'XCU' },
+        { name: 'Nickel', key: 'nickel', symbol: 'NI' },
+        { name: 'Cobalt', key: 'cobalt', symbol: 'XCO' },
+      ];
+
+      function createCard(el, title) {
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `
+          <div class="title">${title}</div>
+          <div class="value price">—</div>
+          <div class="muted updated" style="margin-top:8px;">Loading…</div>
+        `;
+        el.appendChild(div);
+        return div;
+      }
+
+      async function loadMetal(key, card) {
+        const res = await fetch(`/api/${key}/latest`);
+        const data = await res.json();
+        const u = card.querySelector('.updated');
+        if (!data.success) {
+          u.textContent = data.error || 'Failed';
+          return;
+        }
+        const d = data.data;
+        const priceEl = card.querySelector('.price');
+        if (key === 'copper' || key === 'nickel') {
+          priceEl.textContent = `USD/lb: $${(d.usdPerPound ?? 0).toFixed(4)}`;
+        } else {
+          priceEl.textContent = `USD/oz: $${d.usdPerOunce.toFixed(2)}`;
+        }
+        const dt = new Date(d.timestamp);
+        u.textContent = `Updated: ${dt.toLocaleString()}`;
+      }
+
+      (function init() {
+        const container = document.getElementById('cards');
+        METALS.forEach(m => {
+          const card = createCard(container, `${m.name} (${m.symbol})`);
+          loadMetal(m.key, card).catch(err => {
+            card.querySelector('.updated').textContent = String(err);
+          });
+        });
+      })();
+    </script>
+  </body>
+  </html>
+
+
