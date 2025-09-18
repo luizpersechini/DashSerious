@@ -27,6 +27,12 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
   - Others: USD/oz (2 decimals)
   - Cobalt: USD/metric ton (no decimals)
 
+### Charts & Refresh Strategy
+
+- Multi-symbol fetch every ~45 minutes to fit Essential plan (≤960 req/mo)
+- In-memory time series buffer per metal (`/api/:metal/timeseries?limit=60`)
+- Lightweight SVG sparkline on each card; values are the same units as shown on the card
+
 ### UI / Styling
 
 - Dark theme with gradient background and sleek cards
