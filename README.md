@@ -6,7 +6,7 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
 
 - Backend: Express server that fetches MetalpriceAPI, caches results, and serves a small API + static page.
 - Frontend: Static HTML page with responsive grid cards and dark trading-desk look.
-- Data Provider: MetalpriceAPI (`/latest`) with API key auth.
+- Data Provider: MetalpriceAPI (`/latest`, `timeframe`) with API key auth.
 
 ## Features
 
@@ -18,6 +18,7 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
   - `GET /api/copper/latest`
   - `GET /api/nickel/latest` (symbol `NI`)
   - `GET /api/cobalt/latest`
+  - `GET /api/brl/latest` (USD→BRL FX)
 - Unit handling
   - Precious metals (XAU, XAG, XPT, XPD): prices in USD/oz (troy) and internal conversion to USD/g
   - Others (XCU, NI, XCO): prices in USD/oz (avoirdupois) with USD/g
@@ -26,21 +27,22 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
   - Copper/Nickel: USD/lb (4 decimals)
   - Others: USD/oz (2 decimals)
   - Cobalt: USD/metric ton (no decimals)
+  - BRL card: USD/BRL FX (4 decimals)
 
 ### Charts & Refresh Strategy
 
 - Multi-symbol fetch every ~45 minutes to fit Essential plan (≤960 req/mo)
 - In-memory time series buffer per metal (`/api/:metal/timeseries?limit=N`)
 - One-time historical seed: 360 days via timeframe endpoint
-- Lightweight SVG chart with minimal axes and date labels; values use the same units as the card
+- Lightweight SVG chart with minimal axes and date labels; values are the same units as the card; BRL card shows USD→BRL FX
 
 ### UI / Styling
 
-- Dark theme with gradient background and sleek, larger cards
+- Dark theme with gradient background and sleek cards
 - Per-metal accent colors on card headers (gold/silver/platinum/palladium/copper/nickel/cobalt)
 - Inter font loaded from Google Fonts
 - Locale-aware number formatting via `Intl.NumberFormat` for clean currency display
-- X-axis labels are compact (e.g., `Sep 07` or `Sep '25`); font-size configurable in CSS
+- Header currency selector (USD/BRL) switches price display for metal cards; charts also scale when BRL is selected
 
 ## Getting Started
 
@@ -64,13 +66,6 @@ METALPRICE_API_BASE=https://api.metalpriceapi.com/v1
 npm run dev
 ```
 Visit `http://localhost:3000`.
-
-### Chart Controls
-
-- Timeframe selector: 30d, 90d, 180d, 360d (defaults to 360d)
-- Periodicity selector: Daily, Weekly (avg), Monthly (avg)
-- X-axis font size can be customized at:
-  - `public/styles.css` → `.axis text, text.axis { font-size: 3px; ... }`
 
 5. Build and run
 ```bash
