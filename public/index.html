@@ -39,7 +39,7 @@
         div.innerHTML = `
           <div class="title">${title}</div>
           <div class="value price">—</div>
-          <svg class="spark" viewBox="0 0 100 28" preserveAspectRatio="none" style="width:100%;height:28px;opacity:.9"></svg>
+          <svg class="spark chart" viewBox="0 0 100 28" preserveAspectRatio="none"></svg>
           <div class="muted updated" style="margin-top:8px;">Loading…</div>
         `;
         el.appendChild(div);
@@ -69,13 +69,7 @@
         const dt = new Date(d.timestamp);
         u.textContent = `Updated: ${dt.toLocaleString()}`;
 
-        // Load sparkline
-        try {
-          const ts = await fetch(`/api/${key}/timeseries?limit=60`).then(r => r.json());
-          if (ts.success) {
-            renderSpark(card.querySelector('.spark'), ts.data.points.map(p => p.v));
-          }
-        } catch (e) { /* ignore */ }
+        await refreshChart(key, card);
       }
 
       (function init() {
@@ -88,6 +82,16 @@
         });
       })();
 
+      async function refreshChart(key, card) {
+        const limit = 120;
+        try {
+          const ts = await fetch(`/api/${key}/timeseries?limit=${limit}`).then(r => r.json());
+          if (ts.success) {
+            const values = ts.data.points.map(p => p.v);
+            renderSpark(card.querySelector('.spark'), values);
+          }
+        } catch (e) { /* ignore */ }
+      }
       function renderSpark(svg, values) {
         if (!values || values.length < 2) { svg.innerHTML = ''; return; }
         const min = Math.min(...values);

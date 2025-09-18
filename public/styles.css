@@ -38,8 +38,8 @@ body {
 
 #cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 18px;
 }
 
 .card {
@@ -47,7 +47,7 @@ body {
   background: linear-gradient(180deg, var(--card), #101720);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 16px;
+  padding: 18px;
   box-shadow: 0 10px 24px rgba(0,0,0,0.35);
   transition: transform 120ms ease, box-shadow 120ms ease;
 }
@@ -62,13 +62,33 @@ body {
 .card:hover { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(0,0,0,0.45); }
 
 .title { font-weight: 600; margin: 0 0 8px; color: var(--text); opacity: 0.95; }
-.value.price { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.value.price { font-size: 1.8rem; font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
-.updated { margin-top: 6px; font-size: 0.88rem; }
+.updated { margin-top: 8px; font-size: 0.9rem; }
+
+.controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 8px 0 6px;
+}
+.controls select {
+  background: #0f1720;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}
+.chart {
+  width: 100%;
+  height: 96px;
+}
 
 @media (max-width: 480px) {
   .container { margin: 12px auto; }
-  .value.price { font-size: 1.4rem; }
+  .value.price { font-size: 1.5rem; }
 }
 
 /* Per-metal accents (override gradient vars per card) */

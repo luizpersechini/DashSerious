@@ -145,6 +145,49 @@ setInterval(() => {
 	});
 }, REFRESH_INTERVAL_MS).unref();
 
+// Seed timeseries with 30 days of history on startup (one-time best effort)
+(async function seedHistory() {
+	try {
+		const end = new Date();
+		const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+		const fmt = (d: Date) => d.toISOString().slice(0, 10);
+		const symbols = TRACKED.map(([s]) => s);
+		const tf = await client.fetchTimeframe({
+			start_date: fmt(start),
+			end_date: fmt(end),
+			base: "USD",
+			currencies: symbols,
+		});
+		if (!tf.success || !tf.rates) return;
+		// tf.rates is date -> { SYMBOL: unitsPerUsd }
+		const dates = Object.keys(tf.rates).sort();
+		for (const date of dates) {
+			const dayRates = tf.rates[date]!;
+			const t = new Date(date).getTime();
+			for (const symbol of symbols) {
+				const unitsPerUsd = dayRates[symbol as keyof typeof dayRates];
+				if (unitsPerUsd == null) continue;
+				const usdPerOunce = 1 / unitsPerUsd;
+				const gramsPerOunce = PRECIOUS.has(symbol) ? TROY_OUNCE_GRAMS : OUNCE_GRAMS;
+				const usdPerGram = usdPerOunce / gramsPerOunce;
+				const base: MetalCache = { usdPerOunce, usdPerGram, timestamp: t };
+				if (symbol === "XCU" || symbol === "NI") base.usdPerPound = usdPerGram * POUND_GRAMS;
+				if (symbol === "XCO") base.usdPerMetricTon = usdPerGram * METRIC_TON_GRAMS;
+				const value = getDisplayValue(symbol, base);
+				const arr = timeseriesBySymbol.get(symbol) ?? [];
+				arr.push({ t, v: value });
+				timeseriesBySymbol.set(symbol, arr);
+			}
+		}
+		for (const [symbol, arr] of timeseriesBySymbol) {
+			arr.sort((a, b) => a.t - b.t);
+			if (arr.length > MAX_SERIES_POINTS) arr.splice(0, arr.length - MAX_SERIES_POINTS);
+		}
+	} catch {
+		/* ignore seed errors to avoid blocking startup */
+	}
+})();
+
 // Serve static demo page from public/
 app.use(express.static(path.join(process.cwd(), "public")));
 
