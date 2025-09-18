@@ -50,6 +50,8 @@
         const priceEl = card.querySelector('.price');
         if (key === 'copper' || key === 'nickel') {
           priceEl.textContent = `USD/lb: $${(d.usdPerPound ?? 0).toFixed(4)}`;
+        } else if (key === 'cobalt') {
+          priceEl.textContent = `USD/metric ton: $${(d.usdPerMetricTon ?? 0).toFixed(0)}`;
         } else {
           priceEl.textContent = `USD/oz: $${d.usdPerOunce.toFixed(2)}`;
         }

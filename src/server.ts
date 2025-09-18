@@ -7,6 +7,7 @@ type MetalCache = {
 	usdPerOunce: number;
 	usdPerGram: number;
 	usdPerPound?: number;
+	usdPerMetricTon?: number;
 	timestamp: number;
 };
 
@@ -20,6 +21,7 @@ const MIN_REFRESH_MS = 60 * 1000; // 1 minute by default; adjust per plan
 const TROY_OUNCE_GRAMS = 31.1034768;
 const OUNCE_GRAMS = 28.349523125;
 const POUND_GRAMS = 453.59237;
+const METRIC_TON_GRAMS = 1_000_000; // 1000 kg
 const PRECIOUS = new Set(["XAU", "XAG", "XPT", "XPD"]);
 
 const caches = new Map<string, MetalCache>();
@@ -42,6 +44,9 @@ async function refreshSymbolCache(symbol: string) {
 	const base: MetalCache = { usdPerOunce, usdPerGram, timestamp: now };
 	if (symbol === "XCU" || symbol === "NI") {
 		base.usdPerPound = usdPerGram * POUND_GRAMS;
+	}
+	if (symbol === "XCO") {
+		base.usdPerMetricTon = usdPerGram * METRIC_TON_GRAMS;
 	}
 
 	caches.set(symbol, base);
