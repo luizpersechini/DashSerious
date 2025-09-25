@@ -58,6 +58,17 @@
           </div>
           <svg class="spark chart" viewBox="0 0 100 28" preserveAspectRatio="none"></svg>
         `;
+        if (metalKey !== 'brl') {
+          div.style.cursor = 'pointer';
+          div.addEventListener('click', function(e) {
+            // avoid navigation when interacting with controls
+            var t = e.target;
+            var tag = (t && t.tagName ? String(t.tagName).toLowerCase() : '');
+            var inControls = t && typeof t.closest === 'function' ? t.closest('.controls') : null;
+            if (tag === 'select' || tag === 'option' || inControls) return;
+            window.location.href = '/' + metalKey + '.html';
+          });
+        }
         el.appendChild(div);
         return div;
       }
