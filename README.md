@@ -152,3 +152,10 @@ Generates a spreadsheet with daily cobalt history over the last 5 years containi
 4) Output: `exports/cobalt_daily.xlsx`
 
 
+## Security / Secrets
+
+- API keys are loaded from `.env` via `src/config.ts`. Never commit `.env` to version control.
+- `.gitignore` excludes `.env`, build outputs, and `exports/` artifacts.
+- If a key is ever committed by mistake, rotate it immediately in the provider dashboard and remove it from history if required.
+
+
