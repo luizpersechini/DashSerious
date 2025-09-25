@@ -98,8 +98,11 @@ npm run start
 - `src/config.ts` – Minimal `.env` loader and config exports
 - `src/metalpriceClient.ts` – Tiny client for MetalpriceAPI `/latest`
 - `src/server.ts` – Express server, routes, caching, static hosting
-- `public/index.html` – Static UI
+- `public/index.html` – Static UI (cards + mini charts; cards link to detail pages)
+- `public/gold.html` – Gold detail page (line chart, timeframe/period controls)
+- `public/silver.html`, `public/platinum.html`, `public/palladium.html`, `public/copper.html`, `public/nickel.html`, `public/cobalt.html` – Per‑metal detail pages mirroring gold, with correct units and axis formatting
 - `scripts/fetchGold.ts` – CLI script used to verify initial integration
+- `scripts/exportCobalt.ts` – Exports cobalt daily history to Excel (USD/ton and USD/lb)
 
 ## Notes & Decisions
 
@@ -123,5 +126,36 @@ npm run start
 - Multiple base currencies and a UI switcher
 - Persisted caching (file or Redis) to survive restarts
 - Small UI improvements (loading/error states)
+- Detail pages: add OHLC when plan supports and unify area/line styles
+- Shared JS module for detail charts to reduce duplication
+
+## Detail Pages
+
+Each metal card (except FX) links to a dedicated detail page under `/public` with:
+- timeframe selector: 1y / 3y / 5y
+- periodicity: daily / weekly / monthly (averaged)
+- compact axes with month ticks; Y axis uses rounded steps per metal
+- title shows the commodity name; a subtitle under the title shows the display unit (e.g., USD/oz, USD/lb, USD/ton)
+
+Units per page:
+- Gold, Silver, Platinum, Palladium: USD/oz
+- Copper, Nickel: USD/lb (4 decimals)
+- Cobalt: USD/ton (no decimals)
+
+## Cobalt Export (Excel)
+
+Generates a spreadsheet with daily cobalt history over the last 5 years containing `date`, `usdPerMetricTon`, and `usdPerPound`.
+
+1) Ensure `.env` has `METALPRICE_API_KEY` and optional `METALPRICE_API_BASE`.
+2) Install deps: `npm install`
+3) Run: `npm run export:cobalt`
+4) Output: `exports/cobalt_daily.xlsx`
+
+
+## Security / Secrets
+
+- API keys are loaded from `.env` via `src/config.ts`. Never commit `.env` to version control.
+- `.gitignore` excludes `.env`, build outputs, and `exports/` artifacts.
+- If a key is ever committed by mistake, rotate it immediately in the provider dashboard and remove it from history if required.
 
 

@@ -1,1 +1,15 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment
+.env
+.env.*
+
+# Local files
+.DS_Store
+exports/
+
 # Node\nnode_modules\n.env\ndist\n

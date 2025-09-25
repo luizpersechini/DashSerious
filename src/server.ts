@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "node:path";
 import { MetalpriceClient } from "./metalpriceClient.js";
+import { fetchChange } from "./metalpriceClient.js";
 import { config } from "./config.js";
 
 type MetalCache = {
@@ -165,6 +166,17 @@ function routeFor(symbol: string, name: string) {
 		const series = timeseriesBySymbol.get(symbol) ?? [];
 		const slice = series.slice(-limit);
 		return res.json({ success: true, data: { points: slice } });
+	});
+
+	// change stats
+	app.get(`/api/${name}/change`, async (req, res) => {
+		try {
+			const date_type = (req.query?.date_type as string) || "month";
+			const r = await fetchChange({ date_type: date_type as any, base: "USD", currencies: [symbol] });
+			return res.json(r);
+		} catch (e: any) {
+			return res.status(500).json({ success: false, error: String(e?.message || e) });
+		}
 	});
 }
 
