@@ -135,6 +135,7 @@ Each metal card (except FX) links to a dedicated detail page under `/public` wit
 - timeframe selector: 1y / 3y / 5y
 - periodicity: daily / weekly / monthly (averaged)
 - compact axes with month ticks; Y axis uses rounded steps per metal
+- title shows the commodity name; a subtitle under the title shows the display unit (e.g., USD/oz, USD/lb, USD/ton)
 
 Units per page:
 - Gold, Silver, Platinum, Palladium: USD/oz
