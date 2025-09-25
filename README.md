@@ -159,3 +159,22 @@ Generates a spreadsheet with daily cobalt history over the last 5 years containi
 - If a key is ever committed by mistake, rotate it immediately in the provider dashboard and remove it from history if required.
 
 
+## Docker Deployment
+
+Build a production image (multi-stage) and run:
+
+```bash
+# Build
+docker build -t dashboard:latest .
+
+# Run with env (ensure your key is set)
+docker run -p 3000:3000 \
+  -e METALPRICE_API_KEY=$METALPRICE_API_KEY \
+  -e METALPRICE_API_BASE=${METALPRICE_API_BASE:-https://api.metalpriceapi.com/v1} \
+  -e METALPRICE_PLAN=${METALPRICE_PLAN:-essential} \
+  --name dashboard dashboard:latest
+```
+
+Visit `http://localhost:3000`.
+
+
