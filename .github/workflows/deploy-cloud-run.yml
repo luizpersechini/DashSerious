@@ -41,21 +41,6 @@ jobs:
           if [ -z "${{ secrets.METALPRICE_API_KEY }}" ]; then
             echo "Missing METALPRICE_API_KEY repo secret" >&2; exit 1; fi
 
-      - name: Enable APIs
-        run: |
-          gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
-
-      - name: Ensure Artifact Registry repository
-        run: |
-          set -e
-          if gcloud artifacts repositories describe ${{ env.REPO_NAME }} --location=${{ env.REGION }} >/dev/null 2>&1; then
-            echo "Repo exists"
-          else
-            echo "Creating repo ${{ env.REPO_NAME }} in ${{ env.REGION }}"
-            gcloud artifacts repositories create ${{ env.REPO_NAME }} \
-              --repository-format=docker --location=${{ env.REGION }} \
-              --description="Dashboard images" --quiet
-          fi
 
       - name: Configure Docker auth
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
