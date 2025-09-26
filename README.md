@@ -177,4 +177,24 @@ docker run -p 3000:3000 \
 
 Visit `http://localhost:3000`.
 
+### docker-compose (one command)
+
+1) Ensure your Metalprice API key is in your shell env (do not commit it):
+
+```bash
+export METALPRICE_API_KEY=YOUR_KEY
+```
+
+2) Start with Compose:
+
+```bash
+docker compose up --build -d
+```
+
+3) Stop:
+
+```bash
+docker compose down
+```
+
 

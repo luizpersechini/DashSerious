@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  dashboard:
+    build: .
+    container_name: dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      METALPRICE_API_KEY: ${METALPRICE_API_KEY}
+      METALPRICE_API_BASE: ${METALPRICE_API_BASE:-https://api.metalpriceapi.com/v1}
+      METALPRICE_PLAN: ${METALPRICE_PLAN:-essential}
+    restart: unless-stopped
+
