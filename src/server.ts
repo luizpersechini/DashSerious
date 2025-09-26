@@ -104,12 +104,13 @@ async function refreshAllSymbols() {
 			const base: MetalCache = { usdPerOunce: 0, usdPerGram: 0, fxUsdBrl: unitsPerUsd, timestamp: now };
 			caches.set(symbol, base);
 			lastFetchBySymbol.set(symbol, now);
-			const arr = timeseriesBySymbol.get(symbol) ?? [];
-			if (arr.length === 0 || now - arr[arr.length - 1].t > 60 * 1000) {
-				arr.push({ t: now, v: unitsPerUsd });
-				if (arr.length > MAX_SERIES_POINTS) arr.splice(0, arr.length - MAX_SERIES_POINTS);
-				timeseriesBySymbol.set(symbol, arr);
-			}
+            const arr = timeseriesBySymbol.get(symbol) ?? [];
+            const lastPoint = arr[arr.length - 1];
+            if (!lastPoint || now - lastPoint.t > 60 * 1000) {
+                arr.push({ t: now, v: unitsPerUsd });
+                if (arr.length > MAX_SERIES_POINTS) arr.splice(0, arr.length - MAX_SERIES_POINTS);
+                timeseriesBySymbol.set(symbol, arr);
+            }
 			continue;
 		}
 		const usdPerOunce = 1 / unitsPerUsd;
@@ -127,13 +128,14 @@ async function refreshAllSymbols() {
 		lastFetchBySymbol.set(symbol, now);
 
 		// Record a display-value time series point
-		const display = getDisplayValue(symbol, base);
-		const arr = timeseriesBySymbol.get(symbol) ?? [];
-		if (arr.length === 0 || now - arr[arr.length - 1].t > 60 * 1000) {
-			arr.push({ t: now, v: display });
-			if (arr.length > MAX_SERIES_POINTS) arr.splice(0, arr.length - MAX_SERIES_POINTS);
-			timeseriesBySymbol.set(symbol, arr);
-		}
+        const display = getDisplayValue(symbol, base);
+        const arr = timeseriesBySymbol.get(symbol) ?? [];
+        const lastPoint = arr[arr.length - 1];
+        if (!lastPoint || now - lastPoint.t > 60 * 1000) {
+            arr.push({ t: now, v: display });
+            if (arr.length > MAX_SERIES_POINTS) arr.splice(0, arr.length - MAX_SERIES_POINTS);
+            timeseriesBySymbol.set(symbol, arr);
+        }
 	}
 }
 

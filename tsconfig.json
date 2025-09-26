@@ -47,4 +47,8 @@
     "allowSyntheticDefaultImports": true,
     "noEmitOnError": false,
   }
+  ,
+  "include": [
+    "src/**/*.ts"
+  ]
 }
