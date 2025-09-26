@@ -197,35 +197,39 @@ docker compose up --build -d
 docker compose down
 ```
 
-## Google Cloud Run (free tier)
+## Google Cloud Run (free tier) – South America default
 
-Pre-reqs: `gcloud` CLI installed, a Google Cloud project (PROJECT_ID), billing enabled, and a regional Artifact Registry repo (REPO_NAME) created.
+Pre-reqs: `gcloud` CLI installed, project `hip-principle-473317-j4`, billing enabled.
+
+Region and repo used below:
+- Region: `southamerica-east1` (São Paulo)
+- Repo: `dashboard-repo`
 
 ```bash
 # Auth and defaults
 gcloud auth login
-gcloud config set project PROJECT_ID
-gcloud config set run/region REGION
+gcloud config set project hip-principle-473317-j4
+gcloud config set run/region southamerica-east1
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
 
-# Build local image
-docker build -t dashboard:latest .
+# Create Artifact Registry repo (one-time)
+gcloud artifacts repositories create dashboard-repo \
+  --repository-format=docker --location=southamerica-east1 \
+  --description="Dashboard images"
 
-# Tag for Artifact Registry
-docker tag dashboard:latest REGION-docker.pkg.dev/PROJECT_ID/REPO_NAME/dashboard:latest
-
-# Login to Artifact Registry and push
-gcloud auth configure-docker REGION-docker.pkg.dev
-docker push REGION-docker.pkg.dev/PROJECT_ID/REPO_NAME/dashboard:latest
+# Build and push with Cloud Build (no local Docker required)
+gcloud builds submit --region southamerica-east1 \
+  --tag southamerica-east1-docker.pkg.dev/hip-principle-473317-j4/dashboard-repo/dashboard:latest
 
 # Deploy to Cloud Run (allow unauthenticated)
+export METALPRICE_API_KEY=YOUR_KEY
 gcloud run deploy dashboard \
-  --image REGION-docker.pkg.dev/PROJECT_ID/REPO_NAME/dashboard:latest \
-  --platform managed \
-  --allow-unauthenticated \
+  --image southamerica-east1-docker.pkg.dev/hip-principle-473317-j4/dashboard-repo/dashboard:latest \
+  --platform managed --allow-unauthenticated \
   --set-env-vars METALPRICE_API_KEY=$METALPRICE_API_KEY,METALPRICE_API_BASE=${METALPRICE_API_BASE:-https://api.metalpriceapi.com/v1},METALPRICE_PLAN=${METALPRICE_PLAN:-essential}
 
 # Get URL
-gcloud run services describe dashboard --format='value(status.url)'
+gcloud run services describe dashboard --region southamerica-east1 --format='value(status.url)'
 ```
 
 You can also customize `cloudrun-service.yaml` and deploy via:
@@ -233,5 +237,18 @@ You can also customize `cloudrun-service.yaml` and deploy via:
 ```bash
 gcloud run services replace cloudrun-service.yaml
 ```
+
+### GitHub Actions: Auto-deploy to Cloud Run
+
+Workflow file: `.github/workflows/deploy-cloud-run.yml` deploys on pushes to `feature/deploy-web` or `main`.
+
+Set GitHub repo secrets:
+- `GCP_SA_KEY_JSON`: JSON key for a service account with roles:
+  - Artifact Registry Writer (`roles/artifactregistry.writer`)
+  - Cloud Run Admin (`roles/run.admin`)
+  - Service Account User on its own SA (`roles/iam.serviceAccountUser`)
+- `METALPRICE_API_KEY`: your MetalpriceAPI key
+
+Then push to branch to trigger build + deploy. The image is built with Cloud Build and deployed to Cloud Run in `southamerica-east1`.
 
 

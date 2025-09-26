@@ -1,0 +1,59 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - feature/deploy-web
+      - main
+
+env:
+  PROJECT_ID: hip-principle-473317-j4
+  REGION: southamerica-east1
+  REPO_NAME: dashboard-repo
+  SERVICE_NAME: dashboard
+  IMAGE_NAME: dashboard
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          export_default_credentials: true
+          service_account_key: ${{ secrets.GCP_SA_KEY_JSON }}
+
+      - name: Enable APIs
+        run: |
+          gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image with Cloud Build
+        run: |
+          gcloud builds submit \
+            --region ${{ env.REGION }} \
+            --tag ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        env:
+          METALPRICE_API_KEY: ${{ secrets.METALPRICE_API_KEY }}
+          METALPRICE_API_BASE: https://api.metalpriceapi.com/v1
+          METALPRICE_PLAN: essential
+        run: |
+          gcloud run deploy $SERVICE_NAME \
+            --image $REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:${{ github.sha }} \
+            --region $REGION \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars METALPRICE_API_KEY=$METALPRICE_API_KEY,METALPRICE_API_BASE=$METALPRICE_API_BASE,METALPRICE_PLAN=$METALPRICE_PLAN
+
+
