@@ -12,6 +12,7 @@ env:
   REPO_NAME: dashboard-repo
   SERVICE_NAME: dashboard
   IMAGE_NAME: dashboard
+  RUNTIME_SA: 1056503697671-compute@developer.gserviceaccount.com
 
 jobs:
   deploy:
@@ -76,6 +77,7 @@ jobs:
             --region $REGION \
             --platform managed \
             --allow-unauthenticated \
+            --service-account $RUNTIME_SA \
             --set-env-vars METALPRICE_API_KEY=$METALPRICE_API_KEY,METALPRICE_API_BASE=$METALPRICE_API_BASE,METALPRICE_PLAN=$METALPRICE_PLAN
 
 
