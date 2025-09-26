@@ -197,4 +197,41 @@ docker compose up --build -d
 docker compose down
 ```
 
+## Google Cloud Run (free tier)
+
+Pre-reqs: `gcloud` CLI installed, a Google Cloud project (PROJECT_ID), billing enabled, and a regional Artifact Registry repo (REPO_NAME) created.
+
+```bash
+# Auth and defaults
+gcloud auth login
+gcloud config set project PROJECT_ID
+gcloud config set run/region REGION
+
+# Build local image
+docker build -t dashboard:latest .
+
+# Tag for Artifact Registry
+docker tag dashboard:latest REGION-docker.pkg.dev/PROJECT_ID/REPO_NAME/dashboard:latest
+
+# Login to Artifact Registry and push
+gcloud auth configure-docker REGION-docker.pkg.dev
+docker push REGION-docker.pkg.dev/PROJECT_ID/REPO_NAME/dashboard:latest
+
+# Deploy to Cloud Run (allow unauthenticated)
+gcloud run deploy dashboard \
+  --image REGION-docker.pkg.dev/PROJECT_ID/REPO_NAME/dashboard:latest \
+  --platform managed \
+  --allow-unauthenticated \
+  --set-env-vars METALPRICE_API_KEY=$METALPRICE_API_KEY,METALPRICE_API_BASE=${METALPRICE_API_BASE:-https://api.metalpriceapi.com/v1},METALPRICE_PLAN=${METALPRICE_PLAN:-essential}
+
+# Get URL
+gcloud run services describe dashboard --format='value(status.url)'
+```
+
+You can also customize `cloudrun-service.yaml` and deploy via:
+
+```bash
+gcloud run services replace cloudrun-service.yaml
+```
+
 

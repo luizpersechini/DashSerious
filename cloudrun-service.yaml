@@ -1,0 +1,28 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: dashboard
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "3"
+    spec:
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT_ID/REPO_NAME/dashboard:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: METALPRICE_API_KEY
+              value: "SET_IN_DEPLOYMENT_OR_SECRET"
+            - name: METALPRICE_API_BASE
+              value: "https://api.metalpriceapi.com/v1"
+            - name: METALPRICE_PLAN
+              value: "essential"
+      containerConcurrency: 80
+  traffic:
+    - latestRevision: true
+      percent: 100
+
