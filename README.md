@@ -2,6 +2,8 @@
 
 A minimal Node.js + TypeScript dashboard that shows live prices for several metals using MetalpriceAPI.
 
+🌐 **Live Demo:** https://dashboard-1056503697671.southamerica-east1.run.app
+
 ## Overview
 
 - Backend: Express server that fetches MetalpriceAPI, caches results, and serves a small API + static page.
@@ -242,13 +244,57 @@ gcloud run services replace cloudrun-service.yaml
 
 Workflow file: `.github/workflows/deploy-cloud-run.yml` deploys on pushes to `feature/deploy-web` or `main`.
 
-Set GitHub repo secrets:
-- `GCP_SA_KEY_JSON`: JSON key for a service account with roles:
-  - Artifact Registry Writer (`roles/artifactregistry.writer`)
-  - Cloud Run Admin (`roles/run.admin`)
-  - Service Account User on its own SA (`roles/iam.serviceAccountUser`)
-- `METALPRICE_API_KEY`: your MetalpriceAPI key
+#### Prerequisites
 
-Then push to branch to trigger build + deploy. The image is built with Cloud Build and deployed to Cloud Run in `southamerica-east1`.
+1. **Enable Google Cloud APIs** (one-time setup):
+   ```bash
+   gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
+   ```
+
+2. **Create Artifact Registry repository** (one-time setup):
+   ```bash
+   gcloud artifacts repositories create dashboard-repo \
+     --repository-format=docker --location=southamerica-east1 \
+     --description="Dashboard images" --project hip-principle-473317-j4
+   ```
+
+3. **Create service account for CI/CD** (one-time setup):
+   ```bash
+   # Create service account
+   gcloud iam service-accounts create dashboard-deployer \
+     --display-name="Dashboard CI/CD" \
+     --project hip-principle-473317-j4
+   
+   # Grant required roles
+   gcloud projects add-iam-policy-binding hip-principle-473317-j4 \
+     --member serviceAccount:dashboard-deployer@hip-principle-473317-j4.iam.gserviceaccount.com \
+     --role roles/artifactregistry.writer
+   
+   gcloud projects add-iam-policy-binding hip-principle-473317-j4 \
+     --member serviceAccount:dashboard-deployer@hip-principle-473317-j4.iam.gserviceaccount.com \
+     --role roles/run.admin
+   
+   gcloud projects add-iam-policy-binding hip-principle-473317-j4 \
+     --member serviceAccount:dashboard-deployer@hip-principle-473317-j4.iam.gserviceaccount.com \
+     --role roles/iam.serviceAccountUser
+   
+   # Create JSON key
+   gcloud iam service-accounts keys create dashboard-deployer-key.json \
+     --iam-account dashboard-deployer@hip-principle-473317-j4.iam.gserviceaccount.com
+   ```
+
+4. **Set GitHub repository secrets**:
+   - `GCP_SA_KEY_JSON`: Contents of `dashboard-deployer-key.json` file
+   - `METALPRICE_API_KEY`: Your MetalpriceAPI key
+
+#### Deployment Process
+
+Every push to `main` or `feature/deploy-web` automatically:
+1. Builds Docker image
+2. Pushes to Artifact Registry (`southamerica-east1-docker.pkg.dev/hip-principle-473317-j4/dashboard-repo/dashboard`)
+3. Deploys to Cloud Run service in São Paulo region
+4. Updates live site at: https://dashboard-1056503697671.southamerica-east1.run.app
+
+The entire CI/CD process takes ~2-3 minutes.
 
 
