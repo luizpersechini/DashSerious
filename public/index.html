@@ -274,8 +274,12 @@
           // Create chart with v4 API - dark theme matching dashboard
           const colors = getMetalColors(metalKey);
           
+          // Use parent card width instead of container width to prevent expansion
+          const card = container.closest('.card');
+          const chartWidth = card ? card.clientWidth - 44 : container.clientWidth; // 44px = card padding (22px * 2)
+          
           const chart = LightweightCharts.createChart(container, {
-            width: container.clientWidth,
+            width: chartWidth,
             height: 140,
             layout: {
               background: { type: 'solid', color: 'transparent' },
@@ -382,21 +386,23 @@
           series.setData(data);
           chart.timeScale().fitContent();
 
-          // Handle resize with safeguards
+          // Handle resize with safeguards - observe the CARD, not the chart container
           let resizeFrame = null;
           const resizeObserver = new ResizeObserver(() => {
             if (resizeFrame) cancelAnimationFrame(resizeFrame);
             resizeFrame = requestAnimationFrame(() => {
-              if (chart && container.parentElement) {
-                const maxWidth = container.parentElement.clientWidth;
-                const newWidth = Math.min(container.clientWidth, maxWidth);
-                if (newWidth > 0) {
+              if (chart && card) {
+                // Use card width minus padding (22px * 2 = 44px)
+                const newWidth = card.clientWidth - 44;
+                const currentWidth = chart.options().width;
+                if (newWidth > 0 && newWidth !== currentWidth) {
                   chart.applyOptions({ width: newWidth });
                 }
               }
             });
           });
-          resizeObserver.observe(container);
+          // Observe the CARD element, not the chart container
+          resizeObserver.observe(card || container);
 
           // Store chart instance and observer
           chartInstances.set(container, { chart, observer: resizeObserver });

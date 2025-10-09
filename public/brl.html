@@ -80,8 +80,12 @@
           chart.remove();
         }
 
+        // Use parent card width instead of container width to prevent expansion
+        const card = container.closest('.card');
+        const chartWidth = card ? card.clientWidth - 44 : container.clientWidth; // 44px = card padding (22px * 2)
+
         chart = LightweightCharts.createChart(container, {
-          width: container.clientWidth,
+          width: chartWidth,
           height: 400,
           layout: {
             background: { type: 'solid', color: 'transparent' },
@@ -158,21 +162,23 @@
           resizeObserver = null;
         }
 
-        // Create new observer with safeguards
+        // Create new observer with safeguards - observe the CARD, not the chart container
         let resizeFrame = null;
         resizeObserver = new ResizeObserver(() => {
           if (resizeFrame) cancelAnimationFrame(resizeFrame);
           resizeFrame = requestAnimationFrame(() => {
-            if (chart && container.parentElement) {
-              const maxWidth = container.parentElement.clientWidth;
-              const newWidth = Math.min(container.clientWidth, maxWidth);
-              if (newWidth > 0) {
+            if (chart && card) {
+              // Use card width minus padding (22px * 2 = 44px)
+              const newWidth = card.clientWidth - 44;
+              const currentWidth = chart.options().width;
+              if (newWidth > 0 && newWidth !== currentWidth) {
                 chart.applyOptions({ width: newWidth });
               }
             }
           });
         });
-        resizeObserver.observe(container);
+        // Observe the CARD element, not the chart container
+        resizeObserver.observe(card || container);
       }
 
       async function loadChart(){
