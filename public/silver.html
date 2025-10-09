@@ -44,6 +44,7 @@
     <script>
       let chart = null;
       let series = null;
+      let resizeObserver = null;
 
       async function loadSpot() {
         const res = await fetch('/api/silver/latest');
@@ -149,12 +150,27 @@
           priceLineVisible: true,
         });
 
-        // Handle resize
-        new ResizeObserver(() => {
-          if (chart && container.clientWidth > 0) {
-            chart.applyOptions({ width: container.clientWidth });
-          }
-        }).observe(container);
+        // Clean up old observer
+        if (resizeObserver) {
+          resizeObserver.disconnect();
+          resizeObserver = null;
+        }
+
+        // Create new observer with safeguards
+        let resizeFrame = null;
+        resizeObserver = new ResizeObserver(() => {
+          if (resizeFrame) cancelAnimationFrame(resizeFrame);
+          resizeFrame = requestAnimationFrame(() => {
+            if (chart && container.parentElement) {
+              const maxWidth = container.parentElement.clientWidth;
+              const newWidth = Math.min(container.clientWidth, maxWidth);
+              if (newWidth > 0) {
+                chart.applyOptions({ width: newWidth });
+              }
+            }
+          });
+        });
+        resizeObserver.observe(container);
       }
 
       async function loadChart(){

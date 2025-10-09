@@ -216,8 +216,8 @@
         }
         return out;
       }
-      // Store chart instances for cleanup
-      const chartInstances = new Map();
+      // Store chart instances and observers for cleanup
+      const chartInstances = new Map(); // Will store { chart, observer }
 
       // Get metal-specific colors from CSS
       function getMetalColors(metalKey) {
@@ -251,11 +251,12 @@
         console.log('LightweightCharts object:', LightweightCharts);
         console.log('LightweightCharts.createChart:', typeof LightweightCharts.createChart);
 
-        // Clear existing chart
-        const existingChart = chartInstances.get(container);
-        if (existingChart) {
+        // Clear existing chart and observer
+        const existing = chartInstances.get(container);
+        if (existing) {
           try {
-            existingChart.remove();
+            if (existing.observer) existing.observer.disconnect();
+            if (existing.chart) existing.chart.remove();
           } catch (e) {
             console.warn('Error removing old chart:', e);
           }
@@ -381,16 +382,24 @@
           series.setData(data);
           chart.timeScale().fitContent();
 
-          // Store chart instance
-          chartInstances.set(container, chart);
-
-          // Handle resize
+          // Handle resize with safeguards
+          let resizeFrame = null;
           const resizeObserver = new ResizeObserver(() => {
-            if (chart && container.clientWidth > 0) {
-              chart.applyOptions({ width: container.clientWidth });
-            }
+            if (resizeFrame) cancelAnimationFrame(resizeFrame);
+            resizeFrame = requestAnimationFrame(() => {
+              if (chart && container.parentElement) {
+                const maxWidth = container.parentElement.clientWidth;
+                const newWidth = Math.min(container.clientWidth, maxWidth);
+                if (newWidth > 0) {
+                  chart.applyOptions({ width: newWidth });
+                }
+              }
+            });
           });
           resizeObserver.observe(container);
+
+          // Store chart instance and observer
+          chartInstances.set(container, { chart, observer: resizeObserver });
         } catch (error) {
           console.error('Error rendering chart for', metalKey, ':', error, points);
           container.innerHTML = '<div style="text-align:center;padding:20px;color:#ef4444;">Chart error: ' + error.message + '</div>';
