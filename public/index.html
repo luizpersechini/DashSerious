@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css" />
+    <script src="/lib/lightweight-charts/lightweight-charts.standalone.production.js"></script>
   </head>
   <body>
     <div class="appbar">
@@ -45,6 +46,7 @@
           palladium: 'metal-palladium', copper: 'metal-copper', nickel: 'metal-nickel', cobalt: 'metal-cobalt'
         };
         div.className = `card ${classMap[metalKey] || ''}`;
+        div.dataset.metal = metalKey; // Store metal key for unique gradient IDs
         div.innerHTML = `
           <div class="title">${title}</div>
           <div class="value price">—</div>
@@ -54,7 +56,7 @@
               <option value="30">30d</option>
               <option value="90">90d</option>
               <option value="180">180d</option>
-              <option value="360" selected>360d</option>
+              <option value="360" selected>1yr</option>
             </select>
             <select class="per">
               <option value="daily" selected>Daily</option>
@@ -62,19 +64,18 @@
               <option value="monthly">Monthly</option>
             </select>
           </div>
-          <svg class="spark chart" viewBox="0 0 100 28" preserveAspectRatio="none"></svg>
+          <div class="chart-container"></div>
         `;
-        if (metalKey !== 'brl') {
-          div.style.cursor = 'pointer';
-          div.addEventListener('click', function(e) {
-            // avoid navigation when interacting with controls
-            var t = e.target;
-            var tag = (t && t.tagName ? String(t.tagName).toLowerCase() : '');
-            var inControls = t && typeof t.closest === 'function' ? t.closest('.controls') : null;
-            if (tag === 'select' || tag === 'option' || inControls) return;
-            window.location.href = '/' + metalKey + '.html';
-          });
-        }
+        // Make all cards clickable
+        div.style.cursor = 'pointer';
+        div.addEventListener('click', function(e) {
+          // avoid navigation when interacting with controls
+          var t = e.target;
+          var tag = (t && t.tagName ? String(t.tagName).toLowerCase() : '');
+          var inControls = t && typeof t.closest === 'function' ? t.closest('.controls') : null;
+          if (tag === 'select' || tag === 'option' || inControls) return;
+          window.location.href = '/' + metalKey + '.html';
+        });
         el.appendChild(div);
         return div;
       }
@@ -108,7 +109,14 @@
 
       let cards = [];
 
-      (function init() {
+      // Wait for LightweightCharts to load, then initialize
+      function init() {
+        if (typeof LightweightCharts === 'undefined') {
+          console.log('Waiting for LightweightCharts to load...');
+          setTimeout(init, 100);
+          return;
+        }
+
         const container = document.getElementById('cards');
         METALS.forEach(m => {
           const card = createCard(container, `${m.name} (${m.symbol})`, m.key);
@@ -147,7 +155,14 @@
             }
           });
         }
-      })();
+      }
+
+      // Start initialization when DOM is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
 
       async function refreshChart(key, card) {
         const days = Number(card.querySelector('.tf').value) || 360;
@@ -162,7 +177,7 @@
             points = points.slice(-days);
             if (periodicity === 'weekly') points = aggregateWeekly(points);
             else if (periodicity === 'monthly') points = aggregateMonthly(points);
-            renderSpark(card.querySelector('.spark'), points);
+            renderChart(card.querySelector('.chart-container'), points, key);
           }
         } catch (e) { /* ignore */ }
       }
@@ -201,57 +216,185 @@
         }
         return out;
       }
-      function renderSpark(svg, points) {
-        if (!points || points.length < 2) { svg.innerHTML = ''; return; }
-        const W = 100, H = 28, PAD_L = 6, PAD_R = 2, PAD_T = 2, PAD_B = 10;
-        const values = points.map(p => p.v);
-        const times = points.map(p => p.t);
-        const min = Math.min(...values);
-        const max = Math.max(...values);
-        const span = max - min || 1;
-        const toX = i => PAD_L + (i / (values.length - 1)) * (W - PAD_L - PAD_R);
-        const toY = v => H - PAD_B - ((v - min) / span) * (H - PAD_T - PAD_B);
-        const pts = values.map((v, i) => `${toX(i)},${toY(v)}`).join(' ');
+      // Store chart instances for cleanup
+      const chartInstances = new Map();
 
-        // Build ticks (max 5 x-ticks, 4 y-ticks)
-        const xTickCount = Math.min(5, values.length);
-        const xStep = Math.max(1, Math.floor((values.length - 1) / (xTickCount - 1)));
-        const yTickCount = 4;
-        const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
-        const rangeMs = (times[times.length - 1] - times[0]) || (1000 * 60 * 60 * 24);
-        const longRange = rangeMs > 200 * 24 * 60 * 60 * 1000;
+      // Get metal-specific colors from CSS
+      function getMetalColors(metalKey) {
+        const colorMap = {
+          gold: { line: '#fbbf24', top: 'rgba(251, 191, 36, 0.4)', bottom: 'rgba(251, 191, 36, 0.0)' },
+          silver: { line: '#cbd5e1', top: 'rgba(203, 213, 225, 0.4)', bottom: 'rgba(203, 213, 225, 0.0)' },
+          platinum: { line: '#d4d4d8', top: 'rgba(212, 212, 216, 0.4)', bottom: 'rgba(212, 212, 216, 0.0)' },
+          palladium: { line: '#22d3ee', top: 'rgba(34, 211, 238, 0.4)', bottom: 'rgba(34, 211, 238, 0.0)' },
+          copper: { line: '#fb923c', top: 'rgba(251, 146, 60, 0.4)', bottom: 'rgba(251, 146, 60, 0.0)' },
+          nickel: { line: '#34d399', top: 'rgba(52, 211, 153, 0.4)', bottom: 'rgba(52, 211, 153, 0.0)' },
+          cobalt: { line: '#60a5fa', top: 'rgba(96, 165, 250, 0.4)', bottom: 'rgba(96, 165, 250, 0.0)' },
+          brl: { line: '#22d3ee', top: 'rgba(34, 211, 238, 0.4)', bottom: 'rgba(34, 211, 238, 0.0)' }
+        };
+        return colorMap[metalKey] || colorMap.gold;
+      }
 
-        let xTicks = '';
-        for (let i = 0; i < values.length; i += xStep) {
-          const x = toX(i);
-          const d = new Date(times[i]);
-          const label = longRange
-            ? d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
-            : d.toLocaleDateString(undefined, { month: 'short', day: '2-digit' }).replace(/\s0/, ' ');
-          xTicks += `<line x1="${x}" y1="${H-PAD_B}" x2="${x}" y2="${H-PAD_B+2}" class="axis" />`;
-          xTicks += `<text x="${x}" y="${H-1}" text-anchor="middle" class="axis">${label}</text>`;
+      function renderChart(container, points, metalKey) {
+        if (!points || points.length < 2) {
+          container.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8;">No data</div>';
+          return;
         }
 
-        let yTicks = '';
-        for (let j = 0; j <= yTickCount; j++) {
-          const v = min + (j / yTickCount) * span;
-          const y = toY(v);
-          yTicks += `<line x1="${PAD_L-2}" y1="${y}" x2="${PAD_L}" y2="${y}" class="axis" />`;
+        // Check if Lightweight Charts is loaded
+        if (typeof LightweightCharts === 'undefined') {
+          console.error('LightweightCharts library not loaded');
+          container.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8;">Loading chart library...</div>';
+          return;
         }
+        
+        // Debug: log available methods
+        console.log('LightweightCharts object:', LightweightCharts);
+        console.log('LightweightCharts.createChart:', typeof LightweightCharts.createChart);
 
-        svg.innerHTML = `
-          <g class="grid">
-            <line x1="${PAD_L}" y1="${H-PAD_B}" x2="${W-PAD_R}" y2="${H-PAD_B}" />
-          </g>
-          <g class="axis">${xTicks}${yTicks}</g>
-          <polyline points="${pts}" fill="none" stroke="url(#g)" stroke-width="1" />
-          <defs>
-            <linearGradient id="g" x1="0" x2="1" y1="0" y2="0">
-              <stop offset="0%" stop-color="var(--accent-a)" />
-              <stop offset="50%" stop-color="var(--accent-b)" />
-              <stop offset="100%" stop-color="var(--accent-c)" />
-            </linearGradient>
-          </defs>`;
+        // Clear existing chart
+        const existingChart = chartInstances.get(container);
+        if (existingChart) {
+          try {
+            existingChart.remove();
+          } catch (e) {
+            console.warn('Error removing old chart:', e);
+          }
+        }
+        container.innerHTML = '';
+
+        try {
+          // Ensure container has dimensions
+          if (container.clientWidth === 0 || container.clientHeight === 0) {
+            console.warn('Container has no dimensions, waiting...');
+            setTimeout(() => renderChart(container, points, metalKey), 100);
+            return;
+          }
+
+          // Create chart with v4 API - dark theme matching dashboard
+          const colors = getMetalColors(metalKey);
+          
+          const chart = LightweightCharts.createChart(container, {
+            width: container.clientWidth,
+            height: 140,
+            layout: {
+              background: { type: 'solid', color: 'transparent' },
+              textColor: '#94a3b8',
+              fontSize: 11,
+              fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+            },
+            grid: {
+              vertLines: { 
+                visible: false 
+              },
+              horzLines: { 
+                color: '#1f2937',
+                style: 0,
+                visible: true 
+              },
+            },
+            crosshair: {
+              mode: LightweightCharts.CrosshairMode.Normal,
+              vertLine: {
+                color: '#94a3b8',
+                width: 1,
+                style: 3,
+                labelBackgroundColor: '#1f2937',
+              },
+              horzLine: {
+                color: '#94a3b8',
+                width: 1,
+                style: 3,
+                labelBackgroundColor: '#1f2937',
+              },
+            },
+            leftPriceScale: {
+              visible: true,
+              borderVisible: false,
+              scaleMargins: {
+                top: 0.1,
+                bottom: 0.1,
+              },
+            },
+            localization: {
+              priceFormatter: (price) => {
+                // Remove decimals for values >= 1000, show 2 decimals for smaller values
+                if (Math.abs(price) >= 1000) {
+                  return new Intl.NumberFormat('en-US', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0,
+                  }).format(price);
+                } else if (Math.abs(price) >= 1) {
+                  return new Intl.NumberFormat('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  }).format(price);
+                } else {
+                  return new Intl.NumberFormat('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 4,
+                  }).format(price);
+                }
+              },
+            },
+            rightPriceScale: {
+              visible: false,
+            },
+            timeScale: {
+              borderVisible: false,
+              timeVisible: false,
+              secondsVisible: false,
+            },
+            handleScroll: false,
+            handleScale: false,
+            watermark: {
+              visible: false,
+            },
+          });
+
+          // v4 API: addAreaSeries
+          const series = chart.addAreaSeries({
+            lineColor: colors.line,
+            topColor: colors.top,
+            bottomColor: colors.bottom,
+            lineWidth: 2,
+            crosshairMarkerVisible: false,
+            lastValueVisible: false,
+            priceLineVisible: false,
+          });
+
+          // Convert data to Lightweight Charts format
+          // Lightweight Charts expects time as Unix timestamp (seconds) as a string or number
+          const data = points
+            .filter(p => p && typeof p.t === 'number' && typeof p.v === 'number' && !isNaN(p.v))
+            .map(p => ({
+              time: Math.floor(p.t / 1000), // Unix timestamp in seconds
+              value: Number(p.v)
+            }))
+            .sort((a, b) => a.time - b.time);
+
+          console.log('Rendering', data.length, 'points for', metalKey, '- sample:', data.slice(0, 3));
+
+          if (data.length < 2) {
+            throw new Error('Not enough valid data points after filtering');
+          }
+
+          series.setData(data);
+          chart.timeScale().fitContent();
+
+          // Store chart instance
+          chartInstances.set(container, chart);
+
+          // Handle resize
+          const resizeObserver = new ResizeObserver(() => {
+            if (chart && container.clientWidth > 0) {
+              chart.applyOptions({ width: container.clientWidth });
+            }
+          });
+          resizeObserver.observe(container);
+        } catch (error) {
+          console.error('Error rendering chart for', metalKey, ':', error, points);
+          container.innerHTML = '<div style="text-align:center;padding:20px;color:#ef4444;">Chart error: ' + error.message + '</div>';
+        }
       }
     </script>
   </body>

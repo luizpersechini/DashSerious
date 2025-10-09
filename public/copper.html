@@ -3,16 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Copper (XCU) Detail</title>
+    <title>Copper Detail</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css" />
+    <script src="/lib/lightweight-charts/lightweight-charts.standalone.production.js"></script>
   </head>
   <body>
     <div class="appbar">
       <a class="back" href="/">← Back</a>
-      <div class="brand">Copper (XCU) Detail</div>
+      <div class="brand">Copper Detail</div>
       <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
         <span class="badge">Last update: <span id="lastUpdated">—</span></span>
       </div>
@@ -25,9 +26,10 @@
         <div class="controls">
           <label class="muted" style="margin-right:auto">Chart</label>
           <select id="tf">
-            <option value="360" selected>1y</option>
-            <option value="1080">3y</option>
-            <option value="1800">5y</option>
+            <option value="30">30d</option>
+            <option value="90">90d</option>
+            <option value="180">180d</option>
+            <option value="360" selected>1yr</option>
           </select>
           <select id="per">
             <option value="daily" selected>Daily</option>
@@ -35,23 +37,20 @@
             <option value="monthly">Monthly</option>
           </select>
         </div>
-        <svg id="chart" class="chart" viewBox="0 0 100 28" preserveAspectRatio="none"></svg>
+        <div id="chart" class="chart-container" style="height: 400px;"></div>
       </div>
     </main>
 
     <script>
-      const METAL_KEY = 'copper';
-      const UNIT_LABEL = 'USD/lb';
-      const AXIS_BASE = 0.1;
-      const AXIS_SEGMENTS = 6;
-      const Y_DECIMALS = 4;
+      let chart = null;
+      let series = null;
 
       async function loadSpot() {
-        const res = await fetch(`/api/${METAL_KEY}/latest`);
+        const res = await fetch('/api/copper/latest');
         const data = await res.json();
         if (!data.success) return;
         const d = data.data;
-        document.getElementById('spot').innerHTML = `${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 }).format(d.usdPerPound)} <span class="unit">${UNIT_LABEL}</span>`;
+        document.getElementById('spot').innerHTML = `${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(d.usdPerPound)} <span class="unit">USD/lb</span>`;
         document.getElementById('lastUpdated').textContent = new Date(d.timestamp).toLocaleString();
       }
 
@@ -73,55 +72,129 @@
         return points;
       }
 
-      function render(svg, points){
-        if (!points||points.length<2){ svg.innerHTML=''; return; }
-        const W=100,H=28,PL=12,PR=2,PT=2,PB=10;
-        const rawMinV=Math.min(...points.map(p=>p.v)); const rawMaxV=Math.max(...points.map(p=>p.v));
-        const base=AXIS_BASE; const segments=AXIS_SEGMENTS;
-        const minV=Math.floor(rawMinV/base)*base;
-        const maxCandidate=Math.ceil(rawMaxV/base)*base;
-        const step=Math.max(base, Math.ceil(((maxCandidate-minV)/segments)/base)*base);
-        const maxV=minV + step*segments;
-        const spanV=maxV-minV||1;
-        const minT=points[0].t; const maxT=points[points.length-1].t; const spanT=Math.max(1,maxT-minT);
-        const toX=t=>PL+((t-minT)/spanT)*(W-PL-PR);
-        const toY=v=>H-PB-((v-minV)/spanV)*(H-PT-PB);
-        const pts=points.map(p=>`${toX(p.t)},${toY(p.v)}`).join(' ');
-        let xTicks='';
-        const maxTicks=6; const s=new Date(minT); s.setDate(1); s.setHours(0,0,0,0); const e=new Date(maxT); e.setDate(1); e.setHours(0,0,0,0);
-        const monthStarts=[]; const di=new Date(s.getTime());
-        while(di<=e){ monthStarts.push(new Date(di.getTime()).getTime()); di.setMonth(di.getMonth()+1); }
-        const stride=Math.max(1, Math.ceil(monthStarts.length/maxTicks));
-        const longRange=(maxT-minT)>365*24*60*60*1000;
-        monthStarts.filter((_,i)=>i%stride===0).forEach(ts=>{ const x=toX(ts); const d=new Date(ts); const label=longRange? d.toLocaleDateString(undefined,{month:'short',year:'2-digit'}): d.toLocaleDateString(undefined,{month:'short'}); xTicks+=`<line x1="${x}" y1="${H-PB}" x2="${x}" y2="${H-PB+1}" class="axis" />`+`<text x="${x}" y="${H-1}" text-anchor="middle" class="axis">${label}</text>`; });
-        let yTicks='';
-        const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: Y_DECIMALS });
-        for(let j=0;j<=segments;j++){
-          const v=minV + j*step; const y=toY(v);
-          yTicks+=`<line x1="${PL-1}" y1="${y}" x2="${PL}" y2="${y}" class="axis" />`;
-          const lbl = nf.format(v);
-          yTicks+=`<text x="${PL-0.2}" y="${y-0.5}" text-anchor="end" class="axis yaxis">${lbl}</text>`;
+      function createChart(container) {
+        if (chart) {
+          chart.remove();
         }
-        for(let j=1;j<segments*2;j+=2){ const v=minV + (j*step)/2; const y=toY(v); yTicks+=`<line x1="${PL-0.8}" y1="${y}" x2="${PL}" y2="${y}" class="minor" />`; }
-        svg.innerHTML=`<g class="grid"><line x1="${PL}" y1="${H-PB}" x2="${W-PR}" y2="${H-PB}" /></g><g class="axis">${xTicks}${yTicks}</g><polyline points="${pts}" fill="none" stroke="url(#g)" stroke-width="0.4" /><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="0"><stop offset="0%" stop-color="var(--accent-a)" /><stop offset="50%" stop-color="var(--accent-b)" /><stop offset="100%" stop-color="var(--accent-c)" /></linearGradient></defs>`;
+
+        chart = LightweightCharts.createChart(container, {
+          width: container.clientWidth,
+          height: 400,
+          layout: {
+            background: { type: 'solid', color: 'transparent' },
+            textColor: '#94a3b8',
+            fontSize: 12,
+            fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+          },
+          grid: {
+            vertLines: { visible: false },
+            horzLines: { color: '#1f2937', style: 0, visible: true },
+          },
+          crosshair: {
+            mode: LightweightCharts.CrosshairMode.Normal,
+            vertLine: {
+              color: '#94a3b8',
+              width: 1,
+              style: 3,
+              labelBackgroundColor: '#1f2937',
+            },
+            horzLine: {
+              color: '#94a3b8',
+              width: 1,
+              style: 3,
+              labelBackgroundColor: '#1f2937',
+            },
+          },
+          leftPriceScale: {
+            visible: true,
+            borderVisible: false,
+            scaleMargins: { top: 0.1, bottom: 0.1 },
+          },
+          localization: {
+            priceFormatter: (price) => {
+              if (Math.abs(price) >= 1000) {
+                return new Intl.NumberFormat('en-US', {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                }).format(price);
+              } else if (Math.abs(price) >= 1) {
+                return new Intl.NumberFormat('en-US', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                }).format(price);
+              } else {
+                return new Intl.NumberFormat('en-US', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 4,
+                }).format(price);
+              }
+            },
+          },
+          rightPriceScale: { visible: false },
+          timeScale: {
+            borderVisible: false,
+            timeVisible: false,
+            secondsVisible: false,
+          },
+          watermark: { visible: false },
+        });
+
+        series = chart.addAreaSeries({
+          lineColor: '#ed8936',
+          topColor: 'rgba(237, 137, 54, 0.4)',
+          bottomColor: 'rgba(237, 137, 54, 0.0)',
+          lineWidth: 2,
+          crosshairMarkerVisible: true,
+          lastValueVisible: true,
+          priceLineVisible: true,
+        });
+
+        // Handle resize
+        new ResizeObserver(() => {
+          if (chart && container.clientWidth > 0) {
+            chart.applyOptions({ width: container.clientWidth });
+          }
+        }).observe(container);
       }
 
       async function loadChart(){
         const days=Number((document.getElementById('tf')).value)||360;
         const per=(document.getElementById('per')).value;
-        const res=await fetch(`/api/${METAL_KEY}/timeseries?limit=${days+5}`); const js=await res.json(); if(!js.success) return;
+        const res=await fetch(`/api/copper/timeseries?limit=${days+5}`);
+        const js=await res.json();
+        if(!js.success) return;
+        
         let pts=js.data.points.sort((a,b)=>a.t-b.t).slice(-days);
         pts=aggregate(pts, per);
-        render(document.getElementById('chart'), pts);
+        
+        const data = pts
+          .filter(p => p && typeof p.t === 'number' && typeof p.v === 'number' && !isNaN(p.v))
+          .map(p => ({
+            time: Math.floor(p.t / 1000),
+            value: Number(p.v)
+          }))
+          .sort((a, b) => a.time - b.time);
+
+        if (series && data.length > 0) {
+          series.setData(data);
+          chart.timeScale().fitContent();
+        }
       }
 
       (function init(){
-        loadSpot(); loadChart();
+        if (typeof LightweightCharts === 'undefined') {
+          console.error('LightweightCharts not loaded');
+          return;
+        }
+        
+        const container = document.getElementById('chart');
+        createChart(container);
+        loadSpot();
+        loadChart();
+        
         document.getElementById('tf').addEventListener('change', loadChart);
         document.getElementById('per').addEventListener('change', loadChart);
       })();
     </script>
   </body>
-  </html>
-
-
+</html>

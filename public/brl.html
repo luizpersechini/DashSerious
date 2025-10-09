@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Palladium (XPD) Detail</title>
+    <title>USD/BRL Detail</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -13,15 +13,15 @@
   <body>
     <div class="appbar">
       <a class="back" href="/">← Back</a>
-      <div class="brand">Palladium (XPD) Detail</div>
+      <div class="brand">USD/BRL Detail</div>
       <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
         <span class="badge">Last update: <span id="lastUpdated">—</span></span>
       </div>
     </div>
     <main class="container">
-      <div class="card metal-palladium detail-half">
-        <div class="title">Palladium</div>
-        <div class="muted unit-subtitle">USD/oz</div>
+      <div class="card metal-brl detail-half">
+        <div class="title">USD/BRL</div>
+        <div class="muted unit-subtitle">Exchange Rate</div>
         <div class="value price" id="spot">—</div>
         <div class="controls">
           <label class="muted" style="margin-right:auto">Chart</label>
@@ -46,11 +46,13 @@
       let series = null;
 
       async function loadSpot() {
-        const res = await fetch('/api/palladium/latest');
+        const res = await fetch('/api/brl/latest');
         const data = await res.json();
         if (!data.success) return;
         const d = data.data;
-        document.getElementById('spot').innerHTML = `${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(d.usdPerOunce)} <span class="unit">USD/oz</span>`;
+        // BRL shows the exchange rate (how many BRL per 1 USD)
+        const rate = d.fxUsdBrl;
+        document.getElementById('spot').innerHTML = `${rate.toFixed(4)} <span class="unit">BRL per USD</span>`;
         document.getElementById('lastUpdated').textContent = new Date(d.timestamp).toLocaleString();
       }
 
@@ -113,17 +115,17 @@
           localization: {
             priceFormatter: (price) => {
               if (Math.abs(price) >= 1000) {
-                return new Intl.NumberFormat('en-US', {
+                return new Intl.NumberFormat('pt-BR', {
                   minimumFractionDigits: 0,
                   maximumFractionDigits: 0,
                 }).format(price);
               } else if (Math.abs(price) >= 1) {
-                return new Intl.NumberFormat('en-US', {
+                return new Intl.NumberFormat('pt-BR', {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 }).format(price);
               } else {
-                return new Intl.NumberFormat('en-US', {
+                return new Intl.NumberFormat('pt-BR', {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 4,
                 }).format(price);
@@ -140,9 +142,9 @@
         });
 
         series = chart.addAreaSeries({
-          lineColor: '#9f7aea',
-          topColor: 'rgba(159, 122, 234, 0.4)',
-          bottomColor: 'rgba(159, 122, 234, 0.0)',
+          lineColor: '#48bb78',
+          topColor: 'rgba(72, 187, 120, 0.4)',
+          bottomColor: 'rgba(72, 187, 120, 0.0)',
           lineWidth: 2,
           crosshairMarkerVisible: true,
           lastValueVisible: true,
@@ -160,7 +162,7 @@
       async function loadChart(){
         const days=Number((document.getElementById('tf')).value)||360;
         const per=(document.getElementById('per')).value;
-        const res=await fetch(`/api/palladium/timeseries?limit=${days+5}`);
+        const res=await fetch(`/api/brl/timeseries?limit=${days+5}`);
         const js=await res.json();
         if(!js.success) return;
         
@@ -198,3 +200,4 @@
     </script>
   </body>
 </html>
+

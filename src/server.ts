@@ -54,7 +54,7 @@ const caches = new Map<string, MetalCache>();
 const lastFetchBySymbol = new Map<string, number>();
 type SeriesPoint = { t: number; v: number };
 const timeseriesBySymbol = new Map<string, SeriesPoint[]>();
-const MAX_SERIES_POINTS = 500;
+const MAX_SERIES_POINTS = 4000; // ~10 years of daily data
 
 async function refreshSymbolCache(symbol: string) {
 	const now = Date.now();
@@ -223,12 +223,13 @@ setInterval(() => {
 	});
 }, REFRESH_INTERVAL_MS).unref();
 
-// Seed timeseries with 30 days of history on startup (one-time best effort)
+// Seed timeseries with 360 days of history on startup (one-time best effort)
 (async function seedHistory() {
 	try {
 		const end = new Date();
 		const start = new Date(end.getTime() - 360 * 24 * 60 * 60 * 1000);
 		const fmt = (d: Date) => d.toISOString().slice(0, 10);
+		console.log(`📊 Loading historical data from ${fmt(start)} to ${fmt(end)}...`);
 		const symbols = TRACKED.map(([s]) => s);
 		const tf = await client.fetchTimeframe({
 			start_date: fmt(start),
@@ -236,7 +237,11 @@ setInterval(() => {
 			base: "USD",
 			currencies: symbols,
 		});
-		if (!tf.success || !tf.rates) return;
+		if (!tf.success || !tf.rates) {
+			console.error('❌ Failed to load historical data:', tf.error);
+			return;
+		}
+		console.log(`✅ Loaded ${Object.keys(tf.rates).length} days of historical data`);
 		// tf.rates is date -> { SYMBOL: unitsPerUsd }
 		const dates = Object.keys(tf.rates).sort();
 		for (const date of dates) {
@@ -274,6 +279,12 @@ setInterval(() => {
 
 // Serve static demo page from public/
 app.use(express.static(path.join(process.cwd(), "public")));
+
+// Serve lightweight-charts library
+app.use(
+	"/lib/lightweight-charts",
+	express.static(path.join(process.cwd(), "node_modules/lightweight-charts/dist"))
+);
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 app.listen(PORT, () => {
