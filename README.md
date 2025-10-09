@@ -7,7 +7,8 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
 ## Overview
 
 - Backend: Express server that fetches MetalpriceAPI, caches results, and serves a small API + static page.
-- Frontend: Static HTML page with responsive grid cards and dark trading-desk look.
+- Frontend: Static HTML page with responsive grid cards, dark trading-desk look, and professional financial charts.
+- Charting: TradingView Lightweight Charts (v4.2.1) for professional, interactive price visualization.
 - Data Provider: MetalpriceAPI (`/latest`, `timeframe`) with API key auth.
 
 ## Features
@@ -36,14 +37,24 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
 - Multi-symbol fetch cadence is plan-aware (auto-set based on your subscription)
 - In-memory time series buffer per metal (`/api/:metal/timeseries?limit=N`)
 - One-time historical seed: 360 days via timeframe endpoint
-- Lightweight SVG chart with minimal axes and date labels; values are the same units as the card; BRL card shows USD→BRL FX
+- **Professional TradingView Lightweight Charts** with:
+  - Interactive area series with gradients matching metal-specific colors
+  - Dark theme with transparent backgrounds
+  - Left-side Y-axis with smart number formatting (no decimals for values >1000, comma separators)
+  - Date-only crosshair labels (no time display)
+  - Responsive charts using ResizeObserver
+  - No branding/watermarks
+- Timeframe options on both main and detail pages: 30d, 90d, 180d, 1yr
+- Periodicity options: Daily, Weekly (averaged), Monthly (averaged)
+- Values displayed in the same units as the card; BRL shows USD→BRL exchange rate
 
 ### UI / Styling
 
 - Dark theme with gradient background and sleek cards
-- Per-metal accent colors on card headers (gold/silver/platinum/palladium/copper/nickel/cobalt)
+- Per-metal accent colors on card headers and charts (gold/silver/platinum/palladium/copper/nickel/cobalt/brl)
 - Inter font loaded from Google Fonts
 - Locale-aware number formatting via `Intl.NumberFormat` for clean currency display
+- All metal cards are clickable and navigate to dedicated detail pages
 - Header currency selector (USD/BRL) switches price display for metal cards; charts also scale when BRL is selected
 
 ## Getting Started
@@ -105,9 +116,10 @@ npm run start
 - `src/config.ts` – Minimal `.env` loader and config exports
 - `src/metalpriceClient.ts` – Tiny client for MetalpriceAPI `/latest`
 - `src/server.ts` – Express server, routes, caching, static hosting
-- `public/index.html` – Static UI (cards + mini charts; cards link to detail pages)
-- `public/gold.html` – Gold detail page (line chart, timeframe/period controls)
-- `public/silver.html`, `public/platinum.html`, `public/palladium.html`, `public/copper.html`, `public/nickel.html`, `public/cobalt.html` – Per‑metal detail pages mirroring gold, with correct units and axis formatting
+- `public/index.html` – Static UI (cards + interactive Lightweight Charts; all cards link to detail pages)
+- `public/gold.html` – Gold detail page (Lightweight Chart with area series, timeframe/period controls)
+- `public/silver.html`, `public/platinum.html`, `public/palladium.html`, `public/copper.html`, `public/nickel.html`, `public/cobalt.html` – Per‑metal detail pages with Lightweight Charts, metal-specific colors, and correct units
+- `public/brl.html` – USD/BRL exchange rate detail page with full chart and historical data
 - `scripts/fetchGold.ts` – CLI script used to verify initial integration
 - `scripts/exportCobalt.ts` – Exports cobalt daily history to Excel (USD/ton and USD/lb)
 
@@ -127,27 +139,45 @@ npm run start
 - MetalpriceAPI docs (auth, latest, symbols, units):
   - https://metalpriceapi.com/documentation
 
+## Technical Stack
+
+- **Backend**: Node.js 18+, TypeScript, Express
+- **Frontend**: Vanilla HTML/CSS/JavaScript (no frameworks)
+- **Charts**: TradingView Lightweight Charts v4.2.1
+- **Styling**: Custom CSS with Inter font (Google Fonts)
+- **API Client**: Custom MetalpriceAPI TypeScript client
+- **Deployment**: Docker, Google Cloud Run
+- **CI/CD**: GitHub Actions
+
 ## Future Enhancements (optional)
 
 - Add 24h change using the `change` endpoint
-- Multiple base currencies and a UI switcher
 - Persisted caching (file or Redis) to survive restarts
 - Small UI improvements (loading/error states)
-- Detail pages: add OHLC when plan supports and unify area/line styles
 - Shared JS module for detail charts to reduce duplication
+- Export functionality for other metals (similar to cobalt export)
 
 ## Detail Pages
 
-Each metal card (except FX) links to a dedicated detail page under `/public` with:
-- timeframe selector: 1y / 3y / 5y
-- periodicity: daily / weekly / monthly (averaged)
-- compact axes with month ticks; Y axis uses rounded steps per metal
-- title shows the commodity name; a subtitle under the title shows the display unit (e.g., USD/oz, USD/lb, USD/ton)
+Each metal card **and BRL** links to a dedicated detail page under `/public` with:
+- **TradingView Lightweight Charts**: Professional area series with interactive crosshair and responsive behavior
+- **Timeframe selector**: 30d / 90d / 180d / 1yr (matching main dashboard options)
+- **Periodicity**: daily / weekly / monthly (averaged)
+- **Smart Y-axis formatting**: 
+  - Values ≥1000: No decimals, with comma separators (e.g., "2,500")
+  - Values 1-999: 2 decimal places (e.g., "45.32")
+  - Values <1: 2-4 decimal places (e.g., "0.4567")
+- **Date-only crosshair**: Shows date without time for cleaner display
+- **Left-side Y-axis**: Professional trading platform style
+- **Metal-specific colors**: Each chart uses the metal's accent color from the main dashboard
+- Title shows the commodity name; a subtitle under the title shows the display unit (e.g., USD/oz, USD/lb, USD/ton)
+- "Back" button to return to main dashboard
 
 Units per page:
 - Gold, Silver, Platinum, Palladium: USD/oz
 - Copper, Nickel: USD/lb (4 decimals)
 - Cobalt: USD/ton (no decimals)
+- **BRL**: USD/BRL exchange rate (4 decimals)
 
 ## Cobalt Export (Excel)
 
