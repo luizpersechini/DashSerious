@@ -123,6 +123,24 @@ body {
   width: 100%;
   height: 140px;
 }
+.chart-container {
+  width: 100%;
+  height: 140px;
+  position: relative;
+}
+
+/* Hide TradingView watermark/logo */
+.chart-container a[href*="tradingview"],
+.chart-container a[title*="TradingView"],
+.chart-container a[title*="Charting"],
+.chart-container > div > a,
+.chart-container img,
+.chart-container svg[width="35"][height="19"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
 
 .axis text, text.axis { font-size: 2.5px; fill: var(--muted); opacity: 0.8; }
 .axis line { stroke: var(--border); stroke-width: 0.6; opacity: 0.9; }
