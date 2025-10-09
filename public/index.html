@@ -94,7 +94,7 @@
           const fxFmt = new Intl.NumberFormat('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
           priceEl.innerHTML = `${fxFmt.format(fx)} <span class="unit">USD/BRL</span>`;
         } else if (key === 'copper' || key === 'nickel') {
-          priceEl.innerHTML = `${nf4.format(d.usdPerPound ?? 0)} <span class="unit">USD/lb</span>`;
+          priceEl.innerHTML = `${nf2.format(d.usdPerPound ?? 0)} <span class="unit">USD/lb</span>`;
         } else if (key === 'cobalt') {
           priceEl.innerHTML = `${nf0.format(d.usdPerMetricTon ?? 0)} <span class="unit">USD/ton</span>`;
         } else {
