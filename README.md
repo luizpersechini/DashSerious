@@ -42,7 +42,7 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
   - Dark theme with transparent backgrounds
   - Left-side Y-axis with smart number formatting (no decimals for values >1000, comma separators)
   - Date-only crosshair labels (no time display)
-  - Responsive charts using ResizeObserver
+  - Responsive charts with optimized ResizeObserver (prevents viewport expansion on mobile/iPad)
   - No branding/watermarks
 - Timeframe options on both main and detail pages: 30d, 90d, 180d, 1yr
 - Periodicity options: Daily, Weekly (averaged), Monthly (averaged)
@@ -148,6 +148,26 @@ npm run start
 - **API Client**: Custom MetalpriceAPI TypeScript client
 - **Deployment**: Docker, Google Cloud Run
 - **CI/CD**: GitHub Actions
+
+## Technical Improvements & Bug Fixes
+
+### Responsive Chart Implementation (v2)
+
+The dashboard uses an optimized ResizeObserver pattern to prevent viewport expansion issues on mobile devices (especially iPads):
+
+**Problem Solved:**
+- Charts were causing horizontal viewport expansion beyond screen edges
+- ResizeObserver feedback loops occurred when tabs became inactive
+- Chart containers could grow unbounded on mobile devices
+
+**Solution Implemented:**
+- Charts are sized based on parent card width minus padding (44px)
+- ResizeObserver monitors the **card element** (parent), not the chart container itself
+- CSS constraints added: `overflow: hidden` and `max-width: 100%` on both cards and chart containers
+- Width change detection prevents unnecessary chart updates
+- ResizeObserver cleanup on chart re-render prevents memory leaks
+
+This ensures charts remain responsive to window resizing while never expanding beyond their container boundaries.
 
 ## Future Enhancements (optional)
 
