@@ -196,6 +196,25 @@ const TRACKED: Array<[string, string]> = [
 
 for (const [sym, name] of TRACKED) routeFor(sym, name);
 
+// Manual refresh endpoint (forces immediate cache clear and refetch)
+app.post("/api/refresh", async (_req, res) => {
+	try {
+		// Clear all caches to force fresh data
+		caches.clear();
+		lastFetchBySymbol.clear();
+		
+		// Fetch all symbols immediately
+		await refreshAllSymbols();
+		
+		return res.json({ success: true, message: "Data refreshed successfully" });
+	} catch (err: any) {
+		return res.status(500).json({ 
+			success: false, 
+			error: String(err?.message || err) 
+		});
+	}
+});
+
 // Kick off immediate fetch and periodic multi-symbol refresh to align with plan limits
 refreshAllSymbols().catch(() => {/* ignore startup error */});
 setInterval(() => {

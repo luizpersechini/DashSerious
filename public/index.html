@@ -13,6 +13,12 @@
     <div class="appbar">
       <div class="brand">Commodities Dashboard</div>
       <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
+        <button id="refreshBtn" class="refresh-btn" title="Refresh data from API">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 2v4h4M14 14v-4h-4M2.5 9A6 6 0 0 1 14 6M13.5 7A6 6 0 0 1 2 10"/>
+          </svg>
+          Refresh
+        </button>
         <span class="badge">Last update: <span id="lastUpdated">—</span></span>
       </div>
     </div>
@@ -100,10 +106,13 @@
         await refreshChart(key, card);
       }
 
+      let cards = [];
+
       (function init() {
         const container = document.getElementById('cards');
         METALS.forEach(m => {
           const card = createCard(container, `${m.name} (${m.symbol})`, m.key);
+          cards.push({ key: m.key, card });
           loadMetal(m.key, card).catch(err => {
             card.querySelector('.updated').textContent = String(err);
           });
@@ -113,6 +122,31 @@
           if (tfSel) tfSel.addEventListener('change', () => refreshChart(m.key, card));
           if (perSel) perSel.addEventListener('change', () => refreshChart(m.key, card));
         });
+
+        // Wire up refresh button
+        const refreshBtn = document.getElementById('refreshBtn');
+        if (refreshBtn) {
+          refreshBtn.addEventListener('click', async () => {
+            refreshBtn.disabled = true;
+            refreshBtn.classList.add('spinning');
+            try {
+              // Call the refresh API endpoint
+              const res = await fetch('/api/refresh', { method: 'POST' });
+              const data = await res.json();
+              if (data.success) {
+                // Reload all metal data
+                for (const { key, card } of cards) {
+                  await loadMetal(key, card).catch(() => {});
+                }
+              }
+            } catch (err) {
+              console.error('Refresh failed:', err);
+            } finally {
+              refreshBtn.disabled = false;
+              refreshBtn.classList.remove('spinning');
+            }
+          });
+        }
       })();
 
       async function refreshChart(key, card) {

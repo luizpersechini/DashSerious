@@ -69,25 +69,30 @@ npm run dev
 ```
 Visit `http://localhost:3000`.
 
-#### Configure refresh cadence by plan (Essential ~30m)
+#### Configure refresh cadence by plan
 
 The server auto-sets refresh based on your plan, and you can override it.
 
+- **Current plan**: Basic Plus ($21.99/month, 50,000 requests/month, 60-second updates)
 - Supported plans (case-insensitive): `essential`, `basic`, `basicplus`, `professional`, `professionalplus`, `business`.
 - Defaults used:
   - Essential: 30 minutes
   - Basic: 10 minutes
-  - Basic Plus / Professional: 60 seconds
+  - Basic Plus / Professional: 60 seconds ⭐ **(Current)**
   - Professional Plus: 30 seconds
   - Business: 15 seconds
 
 To configure via `.env`:
 
 ```
-METALPRICE_PLAN=essential
+METALPRICE_PLAN=basicplus
 # Optional manual override (minutes) – takes precedence over plan
-# METALPRICE_REFRESH_MINUTES=30
+# METALPRICE_REFRESH_MINUTES=1
 ```
+
+#### Manual Refresh Button
+
+The main dashboard includes a "Refresh" button in the top-right corner that lets you manually trigger an immediate data refresh from the API, bypassing the automatic refresh interval. This is useful when you need the most up-to-date prices without waiting for the next scheduled update.
 
 5. Build and run
 ```bash
