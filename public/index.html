@@ -132,7 +132,7 @@
 
       async function load24hChange(key, card) {
         try {
-          const r = await DashChart.fetchWithRetry(`/api/${key}/change?date_type=yesterday`, { retries: 0, timeoutMs: 6000 });
+          const r = await DashChart.fetchWithRetry(`/api/${key}/change?date_type=recent`, { retries: 0, timeoutMs: 6000 });
           const symbol = METALS.find(m => m.key === key)?.symbol;
           const entry = r && r.rates && symbol ? r.rates[symbol] : null;
           if (entry && typeof entry.change_pct === 'number') {
