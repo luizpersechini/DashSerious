@@ -4,9 +4,10 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Install deps (skip dev tools in final image)
+# Re-sync lockfile for linux/x64 platform, then install
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm install --package-lock-only --no-audit --no-fund && \
+    npm ci --no-audit --no-fund
 
 # Copy source
 COPY tsconfig.json ./
@@ -20,8 +21,9 @@ FROM node:20-alpine AS runner
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Only copy production deps
-COPY package.json package-lock.json ./
+# Use the linux-reconciled lockfile from builder
+COPY package.json ./
+COPY --from=builder /app/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
 # Copy built server and public assets
