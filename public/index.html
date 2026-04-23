@@ -72,6 +72,10 @@
               <option value="90">90d</option>
               <option value="180">180d</option>
               <option value="360" selected>1yr</option>
+              <option value="730">2yr</option>
+              <option value="1095">3yr</option>
+              <option value="1825">5yr</option>
+              <option value="all">All</option>
             </select>
             <select class="per" aria-label="Periodicity">
               <option value="daily" selected>Daily</option>
@@ -158,11 +162,15 @@
       }
 
       async function refreshChart(key, card) {
-        const days = Number(card.querySelector('.tf').value) || 360;
+        const tfVal = card.querySelector('.tf').value;
+        const isAll = tfVal === 'all';
+        const days = isAll ? 0 : (Number(tfVal) || 360);
         const periodicity = String(card.querySelector('.per')?.value || 'daily');
         try {
-          const ts = await DashChart.fetchWithRetry(`/api/${key}/timeseries?limit=${days + 5}`, { retries: 0 });
-          let points = (ts.data.points || []).slice().sort((a, b) => a.t - b.t).slice(-days);
+          const limit = isAll ? 9999 : days + 5;
+          const ts = await DashChart.fetchWithRetry(`/api/${key}/timeseries?limit=${limit}`, { retries: 0 });
+          let points = (ts.data.points || []).slice().sort((a, b) => a.t - b.t);
+          if (!isAll) points = points.slice(-days);
           points = DashChart.applyPeriodicity(points, periodicity);
           DashChart.renderChart(card.querySelector('.chart-container'), points, { metalKey: key });
         } catch { /* chart may fail independently of price */ }
