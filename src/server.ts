@@ -4,6 +4,7 @@ import path from "node:path";
 import { MetalpriceClient } from "./metalpriceClient.js";
 import { fetchChange } from "./metalpriceClient.js";
 import { config } from "./config.js";
+import { hydrateTimeseries, persistTimeseries as persistTS, registerGracefulPersist } from "./storage.js";
 
 type MetalCache = {
 	usdPerOunce: number;
@@ -55,6 +56,41 @@ const lastFetchBySymbol = new Map<string, number>();
 type SeriesPoint = { t: number; v: number };
 const timeseriesBySymbol = new Map<string, SeriesPoint[]>();
 const MAX_SERIES_POINTS = 4000; // ~10 years of daily data
+
+// Single in-flight refresh guard: collapses concurrent /latest cache-miss paths into one upstream call.
+let inFlightRefresh: Promise<void> | null = null;
+function coalesceRefresh(): Promise<void> {
+	if (!inFlightRefresh) {
+		inFlightRefresh = refreshAllSymbols().finally(() => {
+			inFlightRefresh = null;
+		});
+	}
+	return inFlightRefresh;
+}
+
+async function persistTimeseries(): Promise<void> {
+	await persistTS(timeseriesBySymbol);
+}
+
+// Readiness: server accepts connections immediately, but /api handlers wait until the first
+// refresh resolves (bounded) so we never serve a cold empty cache on first load.
+const READY_TIMEOUT_MS = 10_000;
+const bootStart = Date.now();
+let seedComplete = false;
+const ready: Promise<void> = (async () => {
+	// Hydrate from disk first so charts aren't empty during the initial fetch window.
+	const h = await hydrateTimeseries(timeseriesBySymbol);
+	if (h.loaded) console.log(`[storage] hydrated ${h.symbols} symbols from disk`);
+	await new Promise<void>((resolve) => {
+		const timer = setTimeout(resolve, READY_TIMEOUT_MS);
+		coalesceRefresh()
+			.catch(() => {/* boot anyway; handler will surface per-request errors */})
+			.finally(() => {
+				clearTimeout(timer);
+				resolve();
+			});
+	});
+})();
 
 async function refreshSymbolCache(symbol: string) {
 	const now = Date.now();
@@ -146,40 +182,51 @@ function getDisplayValue(symbol: string, cache: MetalCache): number {
 	return cache.usdPerOunce;
 }
 
+async function handleLatest(symbol: string, req: express.Request, res: express.Response) {
+	try {
+		// Serve cache; if too old, coalesce all waiters onto a single multi-symbol refresh
+		// so first-load never fans out into 8 concurrent single-symbol upstream calls.
+		const last = lastFetchBySymbol.get(symbol) ?? 0;
+		if (!caches.has(symbol) || Date.now() - last > REFRESH_INTERVAL_MS) {
+			await coalesceRefresh();
+		}
+		const data = caches.get(symbol);
+		if (!data) return res.status(503).json({ success: false, error: "no data" });
+		// Weak ETag derived from the cache timestamp — cheap and exact.
+		const etag = `W/"${symbol}-${data.timestamp}"`;
+		res.setHeader("Cache-Control", "public, max-age=30");
+		res.setHeader("ETag", etag);
+		if (req.headers["if-none-match"] === etag) {
+			return res.status(304).end();
+		}
+		return res.json({ success: true, data });
+	} catch (err: any) {
+		return res.status(502).json({ success: false, error: String(err?.message || err) });
+	}
+}
+
+function handleTimeseries(symbol: string, req: express.Request, res: express.Response) {
+	const limitParam = Number((req.query?.limit as string) ?? "100");
+	const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, MAX_SERIES_POINTS) : 100;
+	const series = timeseriesBySymbol.get(symbol) ?? [];
+	const slice = series.slice(-limit);
+	return res.json({ success: true, data: { points: slice } });
+}
+
+async function handleChange(symbol: string, req: express.Request, res: express.Response) {
+	try {
+		const date_type = (req.query?.date_type as string) || "month";
+		const r = await fetchChange({ date_type: date_type as any, base: "USD", currencies: [symbol] });
+		return res.json(r);
+	} catch (e: any) {
+		return res.status(500).json({ success: false, error: String(e?.message || e) });
+	}
+}
+
 function routeFor(symbol: string, name: string) {
-	app.get(`/api/${name}/latest`, async (_req, res) => {
-		try {
-			// try to serve cache; if too old, refresh just this symbol as a fallback
-			const last = lastFetchBySymbol.get(symbol) ?? 0;
-			if (!caches.has(symbol) || Date.now() - last > REFRESH_INTERVAL_MS) {
-				await refreshSymbolCache(symbol);
-			}
-			const data = caches.get(symbol);
-			if (!data) return res.status(503).json({ success: false, error: "no data" });
-			return res.json({ success: true, data });
-		} catch (err: any) {
-			return res.status(502).json({ success: false, error: String(err?.message || err) });
-		}
-	});
-
-	app.get(`/api/${name}/timeseries`, (_req, res) => {
-		const limitParam = Number((_req.query?.limit as string) ?? "100");
-		const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, MAX_SERIES_POINTS) : 100;
-		const series = timeseriesBySymbol.get(symbol) ?? [];
-		const slice = series.slice(-limit);
-		return res.json({ success: true, data: { points: slice } });
-	});
-
-	// change stats
-	app.get(`/api/${name}/change`, async (req, res) => {
-		try {
-			const date_type = (req.query?.date_type as string) || "month";
-			const r = await fetchChange({ date_type: date_type as any, base: "USD", currencies: [symbol] });
-			return res.json(r);
-		} catch (e: any) {
-			return res.status(500).json({ success: false, error: String(e?.message || e) });
-		}
-	});
+	app.get(`/api/${name}/latest`, (req, res) => handleLatest(symbol, req, res));
+	app.get(`/api/${name}/timeseries`, (req, res) => handleTimeseries(symbol, req, res));
+	app.get(`/api/${name}/change`, (req, res) => handleChange(symbol, req, res));
 }
 
 // periodic refresh for tracked symbols
@@ -194,7 +241,45 @@ const TRACKED: Array<[string, string]> = [
 	["BRL", "brl"],
 ];
 
+const NAME_TO_SYMBOL = new Map<string, string>(TRACKED.map(([s, n]) => [n, s]));
+
+// Readiness gate: block /api handlers until the initial refresh completes (bounded),
+// so the very first request never sees an empty cache.
+app.use("/api", async (_req, _res, next) => {
+	try { await ready; } catch { /* surface per-request */ }
+	next();
+});
+
+// Parameterized routes (Phase 4a). The per-name aliases below remain for backward compatibility.
+app.get("/api/metal/:name/latest", (req, res) => {
+	const symbol = NAME_TO_SYMBOL.get(String(req.params.name || "").toLowerCase());
+	if (!symbol) return res.status(404).json({ success: false, error: "unknown metal" });
+	return handleLatest(symbol, req, res);
+});
+app.get("/api/metal/:name/timeseries", (req, res) => {
+	const symbol = NAME_TO_SYMBOL.get(String(req.params.name || "").toLowerCase());
+	if (!symbol) return res.status(404).json({ success: false, error: "unknown metal" });
+	return handleTimeseries(symbol, req, res);
+});
+app.get("/api/metal/:name/change", (req, res) => {
+	const symbol = NAME_TO_SYMBOL.get(String(req.params.name || "").toLowerCase());
+	if (!symbol) return res.status(404).json({ success: false, error: "unknown metal" });
+	return handleChange(symbol, req, res);
+});
+
 for (const [sym, name] of TRACKED) routeFor(sym, name);
+
+// Health: unblocked (not under /api), usable as a Cloud Run readiness probe.
+app.get("/health", (_req, res) => {
+	res.setHeader("Cache-Control", "no-store");
+	return res.json({
+		ok: true,
+		cacheWarm: caches.size === TRACKED.length,
+		cachedSymbols: caches.size,
+		seedComplete,
+		uptimeMs: Date.now() - bootStart,
+	});
+});
 
 // Manual refresh endpoint (forces immediate cache clear and refetch)
 app.post("/api/refresh", async (_req, res) => {
@@ -215,10 +300,10 @@ app.post("/api/refresh", async (_req, res) => {
 	}
 });
 
-// Kick off immediate fetch and periodic multi-symbol refresh to align with plan limits
-refreshAllSymbols().catch(() => {/* ignore startup error */});
+// Initial refresh is already kicked off by the `ready` promise above via coalesceRefresh().
+// Schedule periodic multi-symbol refresh to stay aligned with plan limits.
 setInterval(() => {
-	refreshAllSymbols().catch(() => {
+	coalesceRefresh().catch(() => {
 		/* ignore periodic errors */
 	});
 }, REFRESH_INTERVAL_MS).unref();
@@ -268,10 +353,20 @@ setInterval(() => {
 				timeseriesBySymbol.set(symbol, arr);
 			}
 		}
-		for (const [symbol, arr] of timeseriesBySymbol) {
+		for (const [sym, arr] of timeseriesBySymbol) {
 			arr.sort((a, b) => a.t - b.t);
-			if (arr.length > MAX_SERIES_POINTS) arr.splice(0, arr.length - MAX_SERIES_POINTS);
+			// Dedupe by timestamp (keeps last write; guards against overlap with hydrated data).
+			const dedup: SeriesPoint[] = [];
+			let prevT = -Infinity;
+			for (const p of arr) {
+				if (p.t === prevT) dedup[dedup.length - 1] = p;
+				else { dedup.push(p); prevT = p.t; }
+			}
+			if (dedup.length > MAX_SERIES_POINTS) dedup.splice(0, dedup.length - MAX_SERIES_POINTS);
+			timeseriesBySymbol.set(sym, dedup);
 		}
+		seedComplete = true;
+		await persistTimeseries().catch(() => {/* non-fatal */});
 	} catch {
 		/* ignore seed errors to avoid blocking startup */
 	}
@@ -286,9 +381,21 @@ app.use(
 	express.static(path.join(process.cwd(), "node_modules/lightweight-charts/dist"))
 );
 
+// Autosave timeseries every 5 min so cold starts don't lose the seeded history.
+setInterval(() => {
+	persistTimeseries().catch(() => {/* non-fatal */});
+}, 5 * 60 * 1000).unref();
+
+// Flush to disk on graceful shutdown.
+registerGracefulPersist(() => persistTimeseries());
+
+export { app, ready };
+
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
-app.listen(PORT, () => {
-	console.log(`Server listening on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== "test") {
+	app.listen(PORT, () => {
+		console.log(`Server listening on http://localhost:${PORT}`);
+	});
+}
 
 

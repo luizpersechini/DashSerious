@@ -9,19 +9,19 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
 - Backend: Express server that fetches MetalpriceAPI, caches results, and serves a small API + static page.
 - Frontend: Static HTML page with responsive grid cards, dark trading-desk look, and professional financial charts.
 - Charting: TradingView Lightweight Charts (v4.2.1) for professional, interactive price visualization.
-- Data Provider: MetalpriceAPI (`/latest`, `timeframe`) with API key auth.
+- Data Provider: MetalpriceAPI (`/latest`, `/timeframe`, `/change`) with API key auth.
 
 ## Features
 
-- Per-metal endpoints with in-memory caching and periodic refresh (60s):
-  - `GET /api/gold/latest`
-  - `GET /api/silver/latest`
-  - `GET /api/platinum/latest`
-  - `GET /api/palladium/latest`
-  - `GET /api/copper/latest`
-  - `GET /api/nickel/latest` (symbol `NI`)
-  - `GET /api/cobalt/latest`
-  - `GET /api/brl/latest` (USD→BRL FX)
+- Parameterized API with per-metal aliases, in-memory caching, and plan-aware periodic refresh:
+  - Parameterized: `GET /api/metal/:name/latest | /timeseries | /change`
+  - Aliases (backwards compatible):
+    - `GET /api/gold/latest`, `/api/silver/latest`, `/api/platinum/latest`, `/api/palladium/latest`
+    - `GET /api/copper/latest`, `/api/nickel/latest` (symbol `NI`), `/api/cobalt/latest`
+    - `GET /api/brl/latest` (USD→BRL FX)
+  - Ops: `GET /health` → `{ok, cacheWarm, cachedSymbols, seedComplete, uptimeMs}`
+  - Mutation: `POST /api/refresh` forces an immediate upstream refetch
+- Response caching: `Cache-Control: public, max-age=30` + weak `ETag` on `/latest`, with `If-None-Match` → `304` handshake
 - Unit handling
   - Precious metals (XAU, XAG, XPT, XPD): prices in USD/oz (troy) and internal conversion to USD/g
   - Others (XCU, NI, XCO): prices in USD/oz (avoirdupois) with USD/g
@@ -31,6 +31,7 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
   - Others: USD/oz (2 decimals)
   - Cobalt: USD/metric ton (no decimals)
   - BRL card: USD/BRL FX (4 decimals)
+- UX: skeleton shimmer while loading, visible "Couldn't load — Retry" affordance on failure, 24h price-change chip next to each price (green/red/grey), `aria-label` on all form controls
 
 ### Charts & Refresh Strategy
 
@@ -114,14 +115,17 @@ npm run start
 ## Project Structure
 
 - `src/config.ts` – Minimal `.env` loader and config exports
-- `src/metalpriceClient.ts` – Tiny client for MetalpriceAPI `/latest`
-- `src/server.ts` – Express server, routes, caching, static hosting
-- `public/index.html` – Static UI (cards + interactive Lightweight Charts; all cards link to detail pages)
-- `public/gold.html` – Gold detail page (Lightweight Chart with area series, timeframe/period controls)
-- `public/silver.html`, `public/platinum.html`, `public/palladium.html`, `public/copper.html`, `public/nickel.html`, `public/cobalt.html` – Per‑metal detail pages with Lightweight Charts, metal-specific colors, and correct units
-- `public/brl.html` – USD/BRL exchange rate detail page with full chart and historical data
+- `src/metalpriceClient.ts` – Tiny client for MetalpriceAPI `/latest`, `/timeframe`, `/change`
+- `src/server.ts` – Express server, routes, caching, readiness gate, `/health`, static hosting
+- `src/storage.ts` – Persists the in-memory timeseries to `data/timeseries.json` (autosave + SIGTERM flush)
+- `public/index.html` – Dashboard (cards + Lightweight Charts; all cards link to detail pages)
+- `public/shared/chart.js` – Shared chart/series helpers (colors, aggregators, `renderChart`, `fetchWithRetry`)
+- `public/shared/detail.js` – Shared bootstrap for the 8 detail pages — each HTML file just calls `DashDetail.init({ key })`
+- `public/gold.html`, `silver.html`, `platinum.html`, `palladium.html`, `copper.html`, `nickel.html`, `cobalt.html`, `brl.html` – Per-metal detail pages (thin shells; all logic lives in `public/shared/detail.js`)
+- `test/smoke.test.ts` – Vitest + supertest smoke suite (health, aliases, parameterized routes, 404, ETag handshake)
 - `scripts/fetchGold.ts` – CLI script used to verify initial integration
 - `scripts/exportCobalt.ts` – Exports cobalt daily history to Excel (USD/ton and USD/lb)
+- `data/` – Runtime-only, gitignored. Holds `timeseries.json` so cold starts don't re-fetch the 360-day seed.
 
 ## Notes & Decisions
 
@@ -141,15 +145,28 @@ npm run start
 
 ## Technical Stack
 
-- **Backend**: Node.js 18+, TypeScript, Express
-- **Frontend**: Vanilla HTML/CSS/JavaScript (no frameworks)
+- **Backend**: Node.js 18+, TypeScript 5.9, Express 5.1
+- **Frontend**: Vanilla HTML/CSS/JavaScript (no frameworks) — shared helpers in `public/shared/*.js`
 - **Charts**: TradingView Lightweight Charts v4.2.1
 - **Styling**: Custom CSS with Inter font (Google Fonts)
-- **API Client**: Custom MetalpriceAPI TypeScript client
+- **API Client**: Custom MetalpriceAPI TypeScript client (`/latest`, `/timeframe`, `/change`)
+- **Persistence**: File-backed timeseries cache (`data/timeseries.json`) with autosave + SIGTERM flush
+- **Testing**: Vitest + supertest smoke suite
 - **Deployment**: Docker, Google Cloud Run
 - **CI/CD**: GitHub Actions
 
 ## Technical Improvements & Bug Fixes
+
+### First-Load Reliability (v3)
+
+**Problem Solved:**
+Cards occasionally rendered empty on the very first page load. The server was calling `app.listen()` before `refreshAllSymbols()` had resolved, and the frontend silently swallowed the resulting 503 responses.
+
+**Solution Implemented:**
+- A readiness `Promise` (bounded to 10 s) is awaited by an `/api/*` middleware, so no `/latest` handler runs against a cold cache.
+- On cache miss, a single in-flight `coalesceRefresh()` serves all waiters — the first paint no longer fans out into 8 concurrent per-symbol upstream calls.
+- Frontend `fetch` calls now use `AbortController` (8 s timeout) with one automatic retry, surfacing failures via a visible "Couldn't load — Retry" affordance instead of leaving blanks.
+- `timeseriesBySymbol` is hydrated from `data/timeseries.json` on boot and flushed on SIGTERM + every 5 min, so cold starts don't re-fetch 360 days of history.
 
 ### Responsive Chart Implementation (v2)
 
@@ -169,13 +186,31 @@ The dashboard uses an optimized ResizeObserver pattern to prevent viewport expan
 
 This ensures charts remain responsive to window resizing while never expanding beyond their container boundaries.
 
+## Testing
+
+```bash
+npm test          # one-shot Vitest run
+npm run test:watch
+```
+
+`test/smoke.test.ts` boots the server in-process (NODE_ENV=test skips `app.listen`), awaits the readiness gate, and verifies:
+
+- `GET /health` responds `ok:true`
+- All 8 alias + 8 parameterized `/latest` endpoints return `success:true` with a `Cache-Control` header and a weak `ETag`
+- `GET /api/metal/unknown/latest` → 404
+- `If-None-Match` on a fresh `ETag` → 304
+
+The suite auto-skips when `METALPRICE_API_KEY` is not set.
+
 ## Future Enhancements (optional)
 
-- Add 24h change using the `change` endpoint
-- Persisted caching (file or Redis) to survive restarts
-- Small UI improvements (loading/error states)
-- Shared JS module for detail charts to reduce duplication
+- ✅ ~~Add 24h change using the `change` endpoint~~ (shipped as the change-chip next to each price)
+- ✅ ~~Persisted caching (file or Redis) to survive restarts~~ (file-based via `src/storage.ts`; Redis remains optional for multi-instance)
+- ✅ ~~Small UI improvements (loading/error states)~~ (skeleton shimmer + visible retry affordance)
+- ✅ ~~Shared JS module for detail charts to reduce duplication~~ (`public/shared/chart.js` + `public/shared/detail.js`)
 - Export functionality for other metals (similar to cobalt export)
+- Redis-backed cache for horizontal scaling on Cloud Run (multi-instance)
+- Server-side rendering of detail pages to collapse the 8 HTML shells into one template
 
 ## Detail Pages
 
