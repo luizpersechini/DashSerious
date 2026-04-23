@@ -206,11 +206,16 @@ async function handleLatest(symbol: string, req: express.Request, res: express.R
 }
 
 function handleTimeseries(symbol: string, req: express.Request, res: express.Response) {
+	const series = timeseriesBySymbol.get(symbol) ?? [];
+	const sinceTs = Number(req.query?.since_ts ?? 0);
+	if (Number.isFinite(sinceTs) && sinceTs > 0) {
+		const points = series.filter(p => p.t >= sinceTs);
+		return res.json({ success: true, data: { points } });
+	}
 	const limitParam = Number((req.query?.limit as string) ?? "100");
 	const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, MAX_SERIES_POINTS) : 100;
-	const series = timeseriesBySymbol.get(symbol) ?? [];
-	const slice = series.slice(-limit);
-	return res.json({ success: true, data: { points: slice } });
+	const points = series.slice(-limit);
+	return res.json({ success: true, data: { points } });
 }
 
 async function handleChange(symbol: string, req: express.Request, res: express.Response) {
