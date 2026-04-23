@@ -6,7 +6,7 @@ WORKDIR /app
 
 # Install deps (skip dev tools in final image)
 COPY package.json package-lock.json ./
-RUN npm ci --silent
+RUN npm ci --no-audit --no-fund
 
 # Copy source
 COPY tsconfig.json ./
@@ -22,7 +22,7 @@ WORKDIR /app
 
 # Only copy production deps
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --silent
+RUN npm ci --omit=dev --no-audit --no-fund
 
 # Copy built server and public assets
 COPY --from=builder /app/dist ./dist
