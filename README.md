@@ -15,13 +15,14 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
 
 - Parameterized API with per-metal aliases, in-memory caching, and plan-aware periodic refresh:
   - Parameterized: `GET /api/metal/:name/latest | /timeseries | /change`
+  - Timeseries supports `?since_ts=<ms>` for time-based filtering and `?limit=N` for count-based fallback
   - Aliases (backwards compatible):
     - `GET /api/gold/latest`, `/api/silver/latest`, `/api/platinum/latest`, `/api/palladium/latest`
     - `GET /api/copper/latest`, `/api/nickel/latest` (symbol `NI`), `/api/cobalt/latest`
     - `GET /api/brl/latest` (USD→BRL FX)
   - Ops: `GET /health` → `{ok, cacheWarm, cachedSymbols, seedComplete, uptimeMs}`
   - Mutation: `POST /api/refresh` forces an immediate upstream refetch
-- Response caching: `Cache-Control: public, max-age=30` + weak `ETag` on `/latest`, with `If-None-Match` → `304` handshake
+- Response caching: `Cache-Control: public, max-age=30` + weak `ETag` on `/latest` with `If-None-Match` → `304` handshake; `Cache-Control: no-store` on `/timeseries` to guarantee fresh data on every request
 - Unit handling
   - Precious metals (XAU, XAG, XPT, XPD): prices in USD/oz (troy) and internal conversion to USD/g
   - Others (XCU, NI, XCO): prices in USD/oz (avoirdupois) with USD/g
@@ -31,13 +32,14 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
   - Others: USD/oz (2 decimals)
   - Cobalt: USD/metric ton (no decimals)
   - BRL card: USD/BRL FX (4 decimals)
-- UX: skeleton shimmer while loading, visible "Couldn't load — Retry" affordance on failure, 24h price-change chip next to each price (green/red/grey), `aria-label` on all form controls
+- UX: skeleton shimmer while loading, visible "Couldn't load — Retry" affordance on failure, live rolling 24h price-change chip next to each price (green/red/grey, driven by `date_type=recent`), `aria-label` on all form controls
 
 ### Charts & Refresh Strategy
 
 - Multi-symbol fetch cadence is plan-aware (auto-set based on your subscription)
-- In-memory time series buffer per metal (`/api/:metal/timeseries?limit=N`)
-- One-time historical seed: 360 days via timeframe endpoint
+- In-memory time series buffer per metal, persisted to `data/timeseries.json`
+- Historical seed: up to 5 years (`SEED_DEPTH_DAYS`, default 1825) via timeframe endpoint, fetched in 365-day chunks with smart gap-fill on restart (only missing ranges are re-fetched)
+- Timeseries endpoint uses **time-based filtering** (`?since_ts=<epoch-ms>`) so each timeframe selector always returns exactly the right window regardless of data density (mix of daily seeded points and minutely real-time refreshes)
 - **Professional TradingView Lightweight Charts** with:
   - Interactive area series with gradients matching metal-specific colors
   - Dark theme with transparent backgrounds
@@ -45,8 +47,9 @@ A minimal Node.js + TypeScript dashboard that shows live prices for several meta
   - Date-only crosshair labels (no time display)
   - Responsive charts with optimized ResizeObserver (prevents viewport expansion on mobile/iPad)
   - No branding/watermarks
-- Timeframe options on both main and detail pages: 30d, 90d, 180d, 1yr
-- Periodicity options: Daily, Weekly (averaged), Monthly (averaged)
+  - All periodicities aggregate to one average point per bucket (daily = one point per calendar day, weekly, monthly) — prevents LightweightCharts errors from duplicate timestamps
+- Timeframe options on both main and detail pages: 30d, 90d, 180d, 1yr, 2yr, 3yr, 5yr, All
+- Periodicity options: Daily (averaged per day), Weekly (averaged), Monthly (averaged)
 - Values displayed in the same units as the card; BRL shows USD→BRL exchange rate
 
 ### UI / Styling
@@ -125,7 +128,7 @@ npm run start
 - `test/smoke.test.ts` – Vitest + supertest smoke suite (health, aliases, parameterized routes, 404, ETag handshake)
 - `scripts/fetchGold.ts` – CLI script used to verify initial integration
 - `scripts/exportCobalt.ts` – Exports cobalt daily history to Excel (USD/ton and USD/lb)
-- `data/` – Runtime-only, gitignored. Holds `timeseries.json` so cold starts don't re-fetch the 360-day seed.
+- `data/` – Runtime-only, gitignored. Holds `timeseries.json` so cold restarts only top-up the gap since the last saved point instead of re-fetching the full 5-year seed.
 
 ## Notes & Decisions
 
@@ -168,6 +171,25 @@ Cards occasionally rendered empty on the very first page load. The server was ca
 - Frontend `fetch` calls now use `AbortController` (8 s timeout) with one automatic retry, surfacing failures via a visible "Couldn't load — Retry" affordance instead of leaving blanks.
 - `timeseriesBySymbol` is hydrated from `data/timeseries.json` on boot and flushed on SIGTERM + every 5 min, so cold starts don't re-fetch 360 days of history.
 
+### Chart Timeframe & Data Integrity Fixes (v4)
+
+**Problems Solved:**
+
+1. **24h change chip showed stale data** — the chip was using `date_type=yesterday` which compares the day-before-yesterday to yesterday's close (static all day). Now uses `date_type=recent` which compares yesterday's close to the current live price, giving a true rolling 24h change.
+
+2. **Charts ignored the selected timeframe** — filtering used `points.slice(-N)` (count-based). With mixed daily seeded data and minutely real-time refreshes, 360 points could span anywhere from a few hours to 4+ years, making the 1yr/2yr/etc. selectors unreliable.
+
+3. **`applyPeriodicity('daily')` was a no-op** — weekly and monthly aggregated their data but daily passed all raw points through unchanged. This sent thousands of intraday minutely points to LightweightCharts instead of ~365 clean daily candles.
+
+4. **LightweightCharts crash on duplicate timestamps** — after converting to second-precision (`Math.floor(t/1000)`), two points within the same second caused `setData()` to throw silently. The old stale chart remained visible instead of updating — the root cause of the "sometimes" symptom.
+
+**Solutions Implemented:**
+
+- `/api/*/timeseries` now accepts `?since_ts=<epoch-ms>` and filters by timestamp (not count), so each timeframe always returns exactly the requested window.
+- `applyPeriodicity('daily')` now calls `aggregateBy(points, startOfDay)` — one average point per calendar day, consistent with weekly/monthly.
+- Added a dedup pass (`.filter((p,i,arr) => i===0 || p.time !== arr[i-1].time)`) before `series.setData()` as a safety guard against duplicate second-precision timestamps.
+- Added `Cache-Control: no-store` to the `/timeseries` endpoint to prevent browsers from serving stale chart data across refreshes.
+
 ### Responsive Chart Implementation (v2)
 
 The dashboard uses an optimized ResizeObserver pattern to prevent viewport expansion issues on mobile devices (especially iPads):
@@ -204,7 +226,7 @@ The suite auto-skips when `METALPRICE_API_KEY` is not set.
 
 ## Future Enhancements (optional)
 
-- ✅ ~~Add 24h change using the `change` endpoint~~ (shipped as the change-chip next to each price)
+- ✅ ~~Add 24h change using the `change` endpoint~~ (shipped as the change-chip next to each price; uses `date_type=recent` for a live rolling 24h value)
 - ✅ ~~Persisted caching (file or Redis) to survive restarts~~ (file-based via `src/storage.ts`; Redis remains optional for multi-instance)
 - ✅ ~~Small UI improvements (loading/error states)~~ (skeleton shimmer + visible retry affordance)
 - ✅ ~~Shared JS module for detail charts to reduce duplication~~ (`public/shared/chart.js` + `public/shared/detail.js`)
@@ -216,7 +238,7 @@ The suite auto-skips when `METALPRICE_API_KEY` is not set.
 
 Each metal card **and BRL** links to a dedicated detail page under `/public` with:
 - **TradingView Lightweight Charts**: Professional area series with interactive crosshair and responsive behavior
-- **Timeframe selector**: 30d / 90d / 180d / 1yr (matching main dashboard options)
+- **Timeframe selector**: 30d / 90d / 180d / 1yr / 2yr / 3yr / 5yr / All
 - **Periodicity**: daily / weekly / monthly (averaged)
 - **Smart Y-axis formatting**: 
   - Values ≥1000: No decimals, with comma separators (e.g., "2,500")
