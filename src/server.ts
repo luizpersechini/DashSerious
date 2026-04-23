@@ -206,6 +206,7 @@ async function handleLatest(symbol: string, req: express.Request, res: express.R
 }
 
 function handleTimeseries(symbol: string, req: express.Request, res: express.Response) {
+	res.setHeader("Cache-Control", "no-store");
 	const series = timeseriesBySymbol.get(symbol) ?? [];
 	const sinceTs = Number(req.query?.since_ts ?? 0);
 	if (Number.isFinite(sinceTs) && sinceTs > 0) {
