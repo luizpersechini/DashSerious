@@ -167,10 +167,11 @@
         const days = isAll ? 0 : (Number(tfVal) || 360);
         const periodicity = String(card.querySelector('.per')?.value || 'daily');
         try {
-          const limit = isAll ? 9999 : days + 5;
-          const ts = await DashChart.fetchWithRetry(`/api/${key}/timeseries?limit=${limit}`, { retries: 0 });
+          const url = isAll
+            ? `/api/${key}/timeseries?limit=9999`
+            : `/api/${key}/timeseries?since_ts=${Date.now() - days * 86400000}`;
+          const ts = await DashChart.fetchWithRetry(url, { retries: 0 });
           let points = (ts.data.points || []).slice().sort((a, b) => a.t - b.t);
-          if (!isAll) points = points.slice(-days);
           points = DashChart.applyPeriodicity(points, periodicity);
           DashChart.renderChart(card.querySelector('.chart-container'), points, { metalKey: key });
         } catch { /* chart may fail independently of price */ }
