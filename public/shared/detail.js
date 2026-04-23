@@ -60,11 +60,15 @@
     }
 
     async function loadChart() {
-      const days = Number(tfSel?.value) || 360;
+      const tfVal = tfSel?.value || '360';
+      const isAll = tfVal === 'all';
+      const days = isAll ? 0 : (Number(tfVal) || 360);
       const periodicity = String(perSel?.value || 'daily');
       try {
-        const ts = await DashChart.fetchWithRetry(`/api/${key}/timeseries?limit=${days + 5}`, { retries: 0 });
-        let points = (ts.data.points || []).slice().sort((a, b) => a.t - b.t).slice(-days);
+        const limit = isAll ? 9999 : days + 5;
+        const ts = await DashChart.fetchWithRetry(`/api/${key}/timeseries?limit=${limit}`, { retries: 0 });
+        let points = (ts.data.points || []).slice().sort((a, b) => a.t - b.t);
+        if (!isAll) points = points.slice(-days);
         points = DashChart.applyPeriodicity(points, periodicity);
         DashChart.renderChart(chartEl, points, { metalKey, height: chartHeight });
       } catch { /* chart optional on error */ }

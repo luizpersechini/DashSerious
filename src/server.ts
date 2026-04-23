@@ -308,54 +308,110 @@ setInterval(() => {
 	});
 }, REFRESH_INTERVAL_MS).unref();
 
-// Seed timeseries with 360 days of history on startup (one-time best effort)
+// Seed timeseries with historical data on startup. Fetches only missing date ranges
+// (backfill + top-up) to avoid re-hitting the API for data already on disk.
 (async function seedHistory() {
 	try {
-		const end = new Date();
-		const start = new Date(end.getTime() - 360 * 24 * 60 * 60 * 1000);
-		const fmt = (d: Date) => d.toISOString().slice(0, 10);
-		console.log(`📊 Loading historical data from ${fmt(start)} to ${fmt(end)}...`);
+		const SEED_DEPTH_DAYS = config.seedDepthDays;
+		const CHUNK_DAYS = 365; // MetalpriceAPI timeframe max window per call
+		const DAY_MS = 24 * 60 * 60 * 1000;
 		const symbols = TRACKED.map(([s]) => s);
-		const tf = await client.fetchTimeframe({
-			start_date: fmt(start),
-			end_date: fmt(end),
-			base: "USD",
-			currencies: symbols,
-		});
-		if (!tf.success || !tf.rates) {
-			console.error('❌ Failed to load historical data:', tf.error);
-			return;
+		const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+		const today = new Date();
+		today.setUTCHours(0, 0, 0, 0);
+		const targetStart = new Date(today.getTime() - SEED_DEPTH_DAYS * DAY_MS);
+		const yesterday = new Date(today.getTime() - DAY_MS);
+
+		// Determine overall coverage from in-memory data (hydrated from disk or prior run).
+		let oldestMs = Infinity;
+		let newestMs = -Infinity;
+		for (const [, arr] of timeseriesBySymbol) {
+			if (arr.length === 0) continue;
+			if (arr[0]!.t < oldestMs) oldestMs = arr[0]!.t;
+			if (arr[arr.length - 1]!.t > newestMs) newestMs = arr[arr.length - 1]!.t;
 		}
-		console.log(`✅ Loaded ${Object.keys(tf.rates).length} days of historical data`);
-		// tf.rates is date -> { SYMBOL: unitsPerUsd }
-		const dates = Object.keys(tf.rates).sort();
-		for (const date of dates) {
-			const dayRates = tf.rates[date]!;
-			const t = new Date(date).getTime();
-			for (const symbol of symbols) {
-				const unitsPerUsd = dayRates[symbol as keyof typeof dayRates];
-				if (unitsPerUsd == null) continue;
-				if (symbol === "BRL") {
-					const arr = timeseriesBySymbol.get(symbol) ?? [];
-					arr.push({ t, v: unitsPerUsd });
-					timeseriesBySymbol.set(symbol, arr);
-					continue;
-				}
-				const usdPerOunce = 1 / unitsPerUsd;
-				const gramsPerOunce = PRECIOUS.has(symbol) ? TROY_OUNCE_GRAMS : OUNCE_GRAMS;
-				const usdPerGram = usdPerOunce / gramsPerOunce;
-				const base: MetalCache = { usdPerOunce, usdPerGram, timestamp: t };
-				if (symbol === "XCU" || symbol === "NI") base.usdPerPound = usdPerGram * POUND_GRAMS;
-				if (symbol === "XCO") base.usdPerMetricTon = usdPerGram * METRIC_TON_GRAMS;
-				const value = getDisplayValue(symbol, base);
-				const arr = timeseriesBySymbol.get(symbol) ?? [];
-				arr.push({ t, v: value });
-				timeseriesBySymbol.set(symbol, arr);
+		const hasData = oldestMs !== Infinity;
+
+		// Build ordered list of [start, end] date ranges to fetch.
+		const ranges: [Date, Date][] = [];
+
+		function pushChunks(from: Date, to: Date) {
+			let cur = new Date(from);
+			while (cur <= to) {
+				const end = new Date(Math.min(cur.getTime() + (CHUNK_DAYS - 1) * DAY_MS, to.getTime()));
+				ranges.push([new Date(cur), end]);
+				cur = new Date(end.getTime() + DAY_MS);
 			}
 		}
+
+		if (!hasData) {
+			// No data at all — fetch the full depth window.
+			pushChunks(targetStart, yesterday);
+		} else {
+			// Backfill: we need older data than what's on disk.
+			const oldestDate = new Date(oldestMs);
+			oldestDate.setUTCHours(0, 0, 0, 0);
+			if (oldestDate > new Date(targetStart.getTime() + 2 * DAY_MS)) {
+				pushChunks(targetStart, new Date(oldestDate.getTime() - DAY_MS));
+			}
+			// Top-up: we need more recent data than what's on disk.
+			const newestDate = new Date(newestMs);
+			newestDate.setUTCHours(0, 0, 0, 0);
+			const dayAfterNewest = new Date(newestDate.getTime() + DAY_MS);
+			if (dayAfterNewest <= yesterday) {
+				pushChunks(dayAfterNewest, yesterday);
+			}
+		}
+
+		if (ranges.length === 0) {
+			console.log(`📊 Historical data already up to date (${[...timeseriesBySymbol.values()][0]?.length ?? 0} points)`);
+			seedComplete = true;
+			return;
+		}
+
+		console.log(`📊 Fetching ${ranges.length} chunk(s) covering up to ${SEED_DEPTH_DAYS} days of history...`);
+
+		function ingestChunk(rates: Record<string, Record<string, number>>) {
+			for (const date of Object.keys(rates).sort()) {
+				const dayRates = rates[date]!;
+				const t = new Date(date).getTime();
+				for (const symbol of symbols) {
+					const unitsPerUsd = dayRates[symbol as keyof typeof dayRates];
+					if (unitsPerUsd == null) continue;
+					let v: number;
+					if (symbol === "BRL") {
+						v = unitsPerUsd;
+					} else {
+						const usdPerOunce = 1 / unitsPerUsd;
+						const gramsPerOunce = PRECIOUS.has(symbol) ? TROY_OUNCE_GRAMS : OUNCE_GRAMS;
+						const usdPerGram = usdPerOunce / gramsPerOunce;
+						const base: MetalCache = { usdPerOunce, usdPerGram, timestamp: t };
+						if (symbol === "XCU" || symbol === "NI") base.usdPerPound = usdPerGram * POUND_GRAMS;
+						if (symbol === "XCO") base.usdPerMetricTon = usdPerGram * METRIC_TON_GRAMS;
+						v = getDisplayValue(symbol, base);
+					}
+					const arr = timeseriesBySymbol.get(symbol) ?? [];
+					arr.push({ t, v });
+					timeseriesBySymbol.set(symbol, arr);
+				}
+			}
+		}
+
+		for (let i = 0; i < ranges.length; i++) {
+			const [start, end] = ranges[i]!;
+			const tf = await client.fetchTimeframe({ start_date: fmt(start), end_date: fmt(end), base: "USD", currencies: symbols });
+			if (!tf.success || !tf.rates) {
+				console.error(`❌ Chunk ${fmt(start)}→${fmt(end)} failed:`, tf.error);
+			} else {
+				ingestChunk(tf.rates);
+			}
+			if (i < ranges.length - 1) await new Promise(r => setTimeout(r, 500));
+		}
+
+		// Sort, dedupe by day-timestamp, and cap to MAX_SERIES_POINTS.
 		for (const [sym, arr] of timeseriesBySymbol) {
 			arr.sort((a, b) => a.t - b.t);
-			// Dedupe by timestamp (keeps last write; guards against overlap with hydrated data).
 			const dedup: SeriesPoint[] = [];
 			let prevT = -Infinity;
 			for (const p of arr) {
@@ -365,10 +421,13 @@ setInterval(() => {
 			if (dedup.length > MAX_SERIES_POINTS) dedup.splice(0, dedup.length - MAX_SERIES_POINTS);
 			timeseriesBySymbol.set(sym, dedup);
 		}
+
+		const sampleLen = [...timeseriesBySymbol.values()][0]?.length ?? 0;
+		console.log(`✅ Historical seed complete — ${sampleLen} points per symbol`);
 		seedComplete = true;
 		await persistTimeseries().catch(() => {/* non-fatal */});
-	} catch {
-		/* ignore seed errors to avoid blocking startup */
+	} catch (err) {
+		console.error('❌ seedHistory failed:', err);
 	}
 })();
 
