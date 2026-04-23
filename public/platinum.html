@@ -9,6 +9,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css" />
     <script src="/lib/lightweight-charts/lightweight-charts.standalone.production.js"></script>
+    <script src="/shared/chart.js" defer></script>
+    <script src="/shared/detail.js" defer></script>
   </head>
   <body>
     <div class="appbar">
@@ -22,16 +24,16 @@
       <div class="card metal-platinum detail-half">
         <div class="title">Platinum</div>
         <div class="muted unit-subtitle">USD/oz</div>
-        <div class="value price" id="spot">—</div>
+        <div class="value price" id="spot"><span class="skeleton" style="width:40%"></span></div>
         <div class="controls">
           <label class="muted" style="margin-right:auto">Chart</label>
-          <select id="tf">
+          <select id="tf" aria-label="Timeframe">
             <option value="30">30d</option>
             <option value="90">90d</option>
             <option value="180">180d</option>
             <option value="360" selected>1yr</option>
           </select>
-          <select id="per">
+          <select id="per" aria-label="Periodicity">
             <option value="daily" selected>Daily</option>
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
@@ -40,183 +42,8 @@
         <div id="chart" class="chart-container" style="height: 400px;"></div>
       </div>
     </main>
-
     <script>
-      let chart = null;
-      let series = null;
-      let resizeObserver = null;
-
-      async function loadSpot() {
-        const res = await fetch('/api/platinum/latest');
-        const data = await res.json();
-        if (!data.success) return;
-        const d = data.data;
-        document.getElementById('spot').innerHTML = `${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(d.usdPerOunce)} <span class="unit">USD/oz</span>`;
-        document.getElementById('lastUpdated').textContent = new Date(d.timestamp).toLocaleString();
-      }
-
-      function startOfDay(ts){ const d=new Date(ts); d.setHours(0,0,0,0); return d.getTime(); }
-      function startOfWeek(ts){ const d=new Date(startOfDay(ts)); const day=d.getDay(); const diff=(day+6)%7; d.setDate(d.getDate()-diff); return d.getTime(); }
-      function startOfMonth(ts){ const d=new Date(startOfDay(ts)); d.setDate(1); return d.getTime(); }
-
-      function aggregate(points, periodicity){
-        if (periodicity==='weekly'){
-          const map=new Map();
-          for(const p of points){ const k=startOfWeek(p.t); const arr=map.get(k)||[]; arr.push(p.v); map.set(k,arr); }
-          return Array.from(map.entries()).sort((a,b)=>a[0]-b[0]).map(([t,arr])=>({t:Number(t), v:arr.reduce((s,x)=>s+x,0)/arr.length}));
-        }
-        if (periodicity==='monthly'){
-          const map=new Map();
-          for(const p of points){ const k=startOfMonth(p.t); const arr=map.get(k)||[]; arr.push(p.v); map.set(k,arr); }
-          return Array.from(map.entries()).sort((a,b)=>a[0]-b[0]).map(([t,arr])=>({t:Number(t), v:arr.reduce((s,x)=>s+x,0)/arr.length}));
-        }
-        return points;
-      }
-
-      function createChart(container) {
-        if (chart) {
-          chart.remove();
-        }
-
-        // Use parent card width instead of container width to prevent expansion
-        const card = container.closest('.card');
-        const chartWidth = card ? card.clientWidth - 44 : container.clientWidth; // 44px = card padding (22px * 2)
-
-        chart = LightweightCharts.createChart(container, {
-          width: chartWidth,
-          height: 400,
-          layout: {
-            background: { type: 'solid', color: 'transparent' },
-            textColor: '#94a3b8',
-            fontSize: 12,
-            fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-          },
-          grid: {
-            vertLines: { visible: false },
-            horzLines: { color: '#1f2937', style: 0, visible: true },
-          },
-          crosshair: {
-            mode: LightweightCharts.CrosshairMode.Normal,
-            vertLine: {
-              color: '#94a3b8',
-              width: 1,
-              style: 3,
-              labelBackgroundColor: '#1f2937',
-            },
-            horzLine: {
-              color: '#94a3b8',
-              width: 1,
-              style: 3,
-              labelBackgroundColor: '#1f2937',
-            },
-          },
-          leftPriceScale: {
-            visible: true,
-            borderVisible: false,
-            scaleMargins: { top: 0.1, bottom: 0.1 },
-          },
-          localization: {
-            priceFormatter: (price) => {
-              if (Math.abs(price) >= 1000) {
-                return new Intl.NumberFormat('en-US', {
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 0,
-                }).format(price);
-              } else if (Math.abs(price) >= 1) {
-                return new Intl.NumberFormat('en-US', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                }).format(price);
-              } else {
-                return new Intl.NumberFormat('en-US', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 4,
-                }).format(price);
-              }
-            },
-          },
-          rightPriceScale: { visible: false },
-          timeScale: {
-            borderVisible: false,
-            timeVisible: false,
-            secondsVisible: false,
-          },
-          watermark: { visible: false },
-        });
-
-        series = chart.addAreaSeries({
-          lineColor: '#68d391',
-          topColor: 'rgba(104, 211, 145, 0.4)',
-          bottomColor: 'rgba(104, 211, 145, 0.0)',
-          lineWidth: 2,
-          crosshairMarkerVisible: true,
-          lastValueVisible: true,
-          priceLineVisible: true,
-        });
-
-        // Clean up old observer
-        if (resizeObserver) {
-          resizeObserver.disconnect();
-          resizeObserver = null;
-        }
-
-        // Create new observer with safeguards - observe the CARD, not the chart container
-        let resizeFrame = null;
-        resizeObserver = new ResizeObserver(() => {
-          if (resizeFrame) cancelAnimationFrame(resizeFrame);
-          resizeFrame = requestAnimationFrame(() => {
-            if (chart && card) {
-              // Use card width minus padding (22px * 2 = 44px)
-              const newWidth = card.clientWidth - 44;
-              const currentWidth = chart.options().width;
-              if (newWidth > 0 && newWidth !== currentWidth) {
-                chart.applyOptions({ width: newWidth });
-              }
-            }
-          });
-        });
-        // Observe the CARD element, not the chart container
-        resizeObserver.observe(card || container);
-      }
-
-      async function loadChart(){
-        const days=Number((document.getElementById('tf')).value)||360;
-        const per=(document.getElementById('per')).value;
-        const res=await fetch(`/api/platinum/timeseries?limit=${days+5}`);
-        const js=await res.json();
-        if(!js.success) return;
-        
-        let pts=js.data.points.sort((a,b)=>a.t-b.t).slice(-days);
-        pts=aggregate(pts, per);
-        
-        const data = pts
-          .filter(p => p && typeof p.t === 'number' && typeof p.v === 'number' && !isNaN(p.v))
-          .map(p => ({
-            time: Math.floor(p.t / 1000),
-            value: Number(p.v)
-          }))
-          .sort((a, b) => a.time - b.time);
-
-        if (series && data.length > 0) {
-          series.setData(data);
-          chart.timeScale().fitContent();
-        }
-      }
-
-      (function init(){
-        if (typeof LightweightCharts === 'undefined') {
-          console.error('LightweightCharts not loaded');
-          return;
-        }
-        
-        const container = document.getElementById('chart');
-        createChart(container);
-        loadSpot();
-        loadChart();
-        
-        document.getElementById('tf').addEventListener('change', loadChart);
-        document.getElementById('per').addEventListener('change', loadChart);
-      })();
+      document.addEventListener('DOMContentLoaded', () => DashDetail.ready(() => DashDetail.init({ key: 'platinum' })));
     </script>
   </body>
 </html>

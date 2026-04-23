@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css" />
     <script src="/lib/lightweight-charts/lightweight-charts.standalone.production.js"></script>
+    <script src="/shared/chart.js" defer></script>
   </head>
   <body>
     <div class="appbar">
@@ -29,36 +30,50 @@
 
     <script>
       const METALS = [
-        { name: 'Gold', key: 'gold', symbol: 'XAU' },
-        { name: 'Silver', key: 'silver', symbol: 'XAG' },
-        { name: 'Platinum', key: 'platinum', symbol: 'XPT' },
+        { name: 'Gold',      key: 'gold',      symbol: 'XAU' },
+        { name: 'Silver',    key: 'silver',    symbol: 'XAG' },
+        { name: 'Platinum',  key: 'platinum',  symbol: 'XPT' },
         { name: 'Palladium', key: 'palladium', symbol: 'XPD' },
-        { name: 'Copper', key: 'copper', symbol: 'XCU' },
-        { name: 'Nickel', key: 'nickel', symbol: 'NI' },
-        { name: 'Cobalt', key: 'cobalt', symbol: 'XCO' },
-        { name: 'USD/BRL', key: 'brl', symbol: 'BRL' },
+        { name: 'Copper',    key: 'copper',    symbol: 'XCU' },
+        { name: 'Nickel',    key: 'nickel',    symbol: 'NI'  },
+        { name: 'Cobalt',    key: 'cobalt',    symbol: 'XCO' },
+        { name: 'USD/BRL',   key: 'brl',       symbol: 'BRL' },
       ];
 
-      function createCard(el, title, metalKey) {
+      const METAL_CLASS = {
+        gold: 'metal-gold', silver: 'metal-silver', platinum: 'metal-platinum',
+        palladium: 'metal-palladium', copper: 'metal-copper',
+        nickel: 'metal-nickel', cobalt: 'metal-cobalt'
+      };
+
+      const nf2 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+      const nf0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+      const fxFmt = new Intl.NumberFormat('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+
+      function formatPrice(key, d) {
+        if (key === 'brl')    return `${fxFmt.format(d.fxUsdBrl ?? 0)} <span class="unit">USD/BRL</span>`;
+        if (key === 'copper' || key === 'nickel')
+                              return `${nf2.format(d.usdPerPound ?? 0)} <span class="unit">USD/lb</span>`;
+        if (key === 'cobalt') return `${nf0.format(d.usdPerMetricTon ?? 0)} <span class="unit">USD/ton</span>`;
+        return `${nf2.format(d.usdPerOunce)} <span class="unit">USD/oz</span>`;
+      }
+
+      function createCard(parent, title, metalKey) {
         const div = document.createElement('div');
-        const classMap = {
-          gold: 'metal-gold', silver: 'metal-silver', platinum: 'metal-platinum',
-          palladium: 'metal-palladium', copper: 'metal-copper', nickel: 'metal-nickel', cobalt: 'metal-cobalt'
-        };
-        div.className = `card ${classMap[metalKey] || ''}`;
-        div.dataset.metal = metalKey; // Store metal key for unique gradient IDs
+        div.className = `card ${METAL_CLASS[metalKey] || ''}`;
+        div.dataset.metal = metalKey;
         div.innerHTML = `
           <div class="title">${title}</div>
-          <div class="value price">—</div>
+          <div class="value price"><span class="skeleton"></span></div>
           <div class="controls">
             <label class="muted" style="margin-right:auto">Chart</label>
-            <select class="tf">
+            <select class="tf" aria-label="Timeframe">
               <option value="30">30d</option>
               <option value="90">90d</option>
               <option value="180">180d</option>
               <option value="360" selected>1yr</option>
             </select>
-            <select class="per">
+            <select class="per" aria-label="Periodicity">
               <option value="daily" selected>Daily</option>
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
@@ -66,86 +81,119 @@
           </div>
           <div class="chart-container"></div>
         `;
-        // Make all cards clickable
         div.style.cursor = 'pointer';
-        div.addEventListener('click', function(e) {
-          // avoid navigation when interacting with controls
-          var t = e.target;
-          var tag = (t && t.tagName ? String(t.tagName).toLowerCase() : '');
-          var inControls = t && typeof t.closest === 'function' ? t.closest('.controls') : null;
-          if (tag === 'select' || tag === 'option' || inControls) return;
+        div.addEventListener('click', (e) => {
+          const t = e.target;
+          const tag = t && t.tagName ? String(t.tagName).toLowerCase() : '';
+          if (tag === 'select' || tag === 'option' || tag === 'button') return;
+          if (t && typeof t.closest === 'function' && (t.closest('.controls') || t.closest('.card-error'))) return;
           window.location.href = '/' + metalKey + '.html';
         });
-        el.appendChild(div);
+        parent.appendChild(div);
         return div;
       }
 
-      async function loadMetal(key, card) {
-        const res = await fetch(`/api/${key}/latest`);
-        const data = await res.json();
-        if (!data.success) return;
-        const d = data.data;
-        const priceEl = card.querySelector('.price');
-        const nf2 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
-        const nf4 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 });
-        const nf0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-        if (key === 'brl') {
-          const fx = d.fxUsdBrl ?? 0;
-          const fxFmt = new Intl.NumberFormat('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-          priceEl.innerHTML = `${fxFmt.format(fx)} <span class="unit">USD/BRL</span>`;
-        } else if (key === 'copper' || key === 'nickel') {
-          priceEl.innerHTML = `${nf2.format(d.usdPerPound ?? 0)} <span class="unit">USD/lb</span>`;
-        } else if (key === 'cobalt') {
-          priceEl.innerHTML = `${nf0.format(d.usdPerMetricTon ?? 0)} <span class="unit">USD/ton</span>`;
-        } else {
-          priceEl.innerHTML = `${nf2.format(d.usdPerOunce)} <span class="unit">USD/oz</span>`;
+      function showCardError(card, message, onRetry) {
+        const price = card.querySelector('.price');
+        price.innerHTML = '<span class="muted" style="font-size:1rem">Unavailable</span>';
+        let errEl = card.querySelector('.card-error');
+        if (!errEl) {
+          errEl = document.createElement('div');
+          errEl.className = 'card-error';
+          price.after(errEl);
         }
-        const dt = new Date(d.timestamp);
-        const top = document.getElementById('lastUpdated');
-        if (top) top.textContent = dt.toLocaleString();
+        errEl.innerHTML = `<span>Couldn't load — ${message || 'network error'}</span><button type="button">Retry</button>`;
+        errEl.querySelector('button').addEventListener('click', (e) => {
+          e.stopPropagation();
+          errEl.remove();
+          price.innerHTML = '<span class="skeleton"></span>';
+          onRetry();
+        });
+      }
 
-        await refreshChart(key, card);
+      function renderChangeChip(card, pct) {
+        if (!isFinite(pct)) return;
+        const price = card.querySelector('.price');
+        let chip = card.querySelector('.change-chip');
+        if (!chip) {
+          chip = document.createElement('span');
+          chip.className = 'change-chip';
+          price.appendChild(chip);
+        }
+        const cls = pct > 0.05 ? 'up' : pct < -0.05 ? 'down' : 'flat';
+        chip.className = 'change-chip ' + cls;
+        const sign = pct > 0 ? '+' : '';
+        chip.textContent = `${sign}${pct.toFixed(2)}% 24h`;
+      }
+
+      async function load24hChange(key, card) {
+        try {
+          const r = await DashChart.fetchWithRetry(`/api/${key}/change?date_type=yesterday`, { retries: 0, timeoutMs: 6000 });
+          const symbol = METALS.find(m => m.key === key)?.symbol;
+          const entry = r && r.rates && symbol ? r.rates[symbol] : null;
+          if (entry && typeof entry.change_pct === 'number') {
+            // For non-BRL metals, rates are units-per-USD, so a positive change_pct means USD strengthened
+            // (i.e. price went down). Invert sign so the chip reads as price change.
+            const pct = key === 'brl' ? entry.change_pct : -entry.change_pct;
+            renderChangeChip(card, pct);
+          }
+        } catch { /* chip is optional */ }
+      }
+
+      async function loadMetal(key, card) {
+        const card_err = card.querySelector('.card-error');
+        if (card_err) card_err.remove();
+        try {
+          const data = await DashChart.fetchWithRetry(`/api/${key}/latest`);
+          const d = data.data;
+          card.querySelector('.price').innerHTML = formatPrice(key, d);
+          const top = document.getElementById('lastUpdated');
+          if (top) top.textContent = new Date(d.timestamp).toLocaleString();
+          // Fire chart + change-chip in parallel — chart is primary, chip is additive.
+          refreshChart(key, card);
+          load24hChange(key, card);
+        } catch (err) {
+          showCardError(card, err && err.message, () => loadMetal(key, card));
+        }
+      }
+
+      async function refreshChart(key, card) {
+        const days = Number(card.querySelector('.tf').value) || 360;
+        const periodicity = String(card.querySelector('.per')?.value || 'daily');
+        try {
+          const ts = await DashChart.fetchWithRetry(`/api/${key}/timeseries?limit=${days + 5}`, { retries: 0 });
+          let points = (ts.data.points || []).slice().sort((a, b) => a.t - b.t).slice(-days);
+          points = DashChart.applyPeriodicity(points, periodicity);
+          DashChart.renderChart(card.querySelector('.chart-container'), points, { metalKey: key });
+        } catch { /* chart may fail independently of price */ }
       }
 
       let cards = [];
 
-      // Wait for LightweightCharts to load, then initialize
       function init() {
-        if (typeof LightweightCharts === 'undefined') {
-          console.log('Waiting for LightweightCharts to load...');
+        if (typeof LightweightCharts === 'undefined' || !window.DashChart) {
           setTimeout(init, 100);
           return;
         }
-
         const container = document.getElementById('cards');
         METALS.forEach(m => {
           const card = createCard(container, `${m.name} (${m.symbol})`, m.key);
           cards.push({ key: m.key, card });
-          loadMetal(m.key, card).catch(err => {
-            card.querySelector('.updated').textContent = String(err);
-          });
-          // Wire up controls to update chart on change
-          const tfSel = card.querySelector('.tf');
-          const perSel = card.querySelector('.per');
-          if (tfSel) tfSel.addEventListener('change', () => refreshChart(m.key, card));
-          if (perSel) perSel.addEventListener('change', () => refreshChart(m.key, card));
+          loadMetal(m.key, card);
+          card.querySelector('.tf')?.addEventListener('change', () => refreshChart(m.key, card));
+          card.querySelector('.per')?.addEventListener('change', () => refreshChart(m.key, card));
         });
 
-        // Wire up refresh button
         const refreshBtn = document.getElementById('refreshBtn');
         if (refreshBtn) {
           refreshBtn.addEventListener('click', async () => {
             refreshBtn.disabled = true;
             refreshBtn.classList.add('spinning');
             try {
-              // Call the refresh API endpoint
               const res = await fetch('/api/refresh', { method: 'POST' });
               const data = await res.json();
               if (data.success) {
-                // Reload all metal data
-                for (const { key, card } of cards) {
-                  await loadMetal(key, card).catch(() => {});
-                }
+                await Promise.all(cards.map(({ key, card }) => loadMetal(key, card)));
               }
             } catch (err) {
               console.error('Refresh failed:', err);
@@ -157,260 +205,8 @@
         }
       }
 
-      // Start initialization when DOM is ready
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-      } else {
-        init();
-      }
-
-      async function refreshChart(key, card) {
-        const days = Number(card.querySelector('.tf').value) || 360;
-        const periodicity = String(card.querySelector('.per')?.value || 'daily');
-        try {
-          const ts = await fetch(`/api/${key}/timeseries?limit=${days + 5}`).then(r => r.json());
-          if (ts.success) {
-            let points = ts.data.points;
-            // Ensure ascending by time
-            points = points.sort((a, b) => a.t - b.t);
-            // Cut to last N days
-            points = points.slice(-days);
-            if (periodicity === 'weekly') points = aggregateWeekly(points);
-            else if (periodicity === 'monthly') points = aggregateMonthly(points);
-            renderChart(card.querySelector('.chart-container'), points, key);
-          }
-        } catch (e) { /* ignore */ }
-      }
-      function startOfDay(ts) { const d = new Date(ts); d.setHours(0,0,0,0); return d.getTime(); }
-      function startOfWeek(ts) {
-        const d = new Date(startOfDay(ts));
-        const day = d.getDay(); // 0=Sun
-        const diff = (day + 6) % 7; // make Monday start
-        d.setDate(d.getDate() - diff);
-        return d.getTime();
-      }
-      function startOfMonth(ts) { const d = new Date(startOfDay(ts)); d.setDate(1); return d.getTime(); }
-      function aggregateWeekly(points) {
-        const map = new Map();
-        for (const p of points) {
-          const k = startOfWeek(p.t);
-          const arr = map.get(k) || []; arr.push(p.v); map.set(k, arr);
-        }
-        const out = [];
-        for (const [k, arr] of Array.from(map.entries()).sort((a,b)=>a[0]-b[0])) {
-          const avg = arr.reduce((s,x)=>s+x,0)/arr.length;
-          out.push({ t: Number(k), v: avg });
-        }
-        return out;
-      }
-      function aggregateMonthly(points) {
-        const map = new Map();
-        for (const p of points) {
-          const k = startOfMonth(p.t);
-          const arr = map.get(k) || []; arr.push(p.v); map.set(k, arr);
-        }
-        const out = [];
-        for (const [k, arr] of Array.from(map.entries()).sort((a,b)=>a[0]-b[0])) {
-          const avg = arr.reduce((s,x)=>s+x,0)/arr.length;
-          out.push({ t: Number(k), v: avg });
-        }
-        return out;
-      }
-      // Store chart instances and observers for cleanup
-      const chartInstances = new Map(); // Will store { chart, observer }
-
-      // Get metal-specific colors from CSS
-      function getMetalColors(metalKey) {
-        const colorMap = {
-          gold: { line: '#fbbf24', top: 'rgba(251, 191, 36, 0.4)', bottom: 'rgba(251, 191, 36, 0.0)' },
-          silver: { line: '#cbd5e1', top: 'rgba(203, 213, 225, 0.4)', bottom: 'rgba(203, 213, 225, 0.0)' },
-          platinum: { line: '#d4d4d8', top: 'rgba(212, 212, 216, 0.4)', bottom: 'rgba(212, 212, 216, 0.0)' },
-          palladium: { line: '#22d3ee', top: 'rgba(34, 211, 238, 0.4)', bottom: 'rgba(34, 211, 238, 0.0)' },
-          copper: { line: '#fb923c', top: 'rgba(251, 146, 60, 0.4)', bottom: 'rgba(251, 146, 60, 0.0)' },
-          nickel: { line: '#34d399', top: 'rgba(52, 211, 153, 0.4)', bottom: 'rgba(52, 211, 153, 0.0)' },
-          cobalt: { line: '#60a5fa', top: 'rgba(96, 165, 250, 0.4)', bottom: 'rgba(96, 165, 250, 0.0)' },
-          brl: { line: '#22d3ee', top: 'rgba(34, 211, 238, 0.4)', bottom: 'rgba(34, 211, 238, 0.0)' }
-        };
-        return colorMap[metalKey] || colorMap.gold;
-      }
-
-      function renderChart(container, points, metalKey) {
-        if (!points || points.length < 2) {
-          container.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8;">No data</div>';
-          return;
-        }
-
-        // Check if Lightweight Charts is loaded
-        if (typeof LightweightCharts === 'undefined') {
-          console.error('LightweightCharts library not loaded');
-          container.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8;">Loading chart library...</div>';
-          return;
-        }
-        
-        // Debug: log available methods
-        console.log('LightweightCharts object:', LightweightCharts);
-        console.log('LightweightCharts.createChart:', typeof LightweightCharts.createChart);
-
-        // Clear existing chart and observer
-        const existing = chartInstances.get(container);
-        if (existing) {
-          try {
-            if (existing.observer) existing.observer.disconnect();
-            if (existing.chart) existing.chart.remove();
-          } catch (e) {
-            console.warn('Error removing old chart:', e);
-          }
-        }
-        container.innerHTML = '';
-
-        try {
-          // Ensure container has dimensions
-          if (container.clientWidth === 0 || container.clientHeight === 0) {
-            console.warn('Container has no dimensions, waiting...');
-            setTimeout(() => renderChart(container, points, metalKey), 100);
-            return;
-          }
-
-          // Create chart with v4 API - dark theme matching dashboard
-          const colors = getMetalColors(metalKey);
-          
-          // Use parent card width instead of container width to prevent expansion
-          const card = container.closest('.card');
-          const chartWidth = card ? card.clientWidth - 44 : container.clientWidth; // 44px = card padding (22px * 2)
-          
-          const chart = LightweightCharts.createChart(container, {
-            width: chartWidth,
-            height: 140,
-            layout: {
-              background: { type: 'solid', color: 'transparent' },
-              textColor: '#94a3b8',
-              fontSize: 11,
-              fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-            },
-            grid: {
-              vertLines: { 
-                visible: false 
-              },
-              horzLines: { 
-                color: '#1f2937',
-                style: 0,
-                visible: true 
-              },
-            },
-            crosshair: {
-              mode: LightweightCharts.CrosshairMode.Normal,
-              vertLine: {
-                color: '#94a3b8',
-                width: 1,
-                style: 3,
-                labelBackgroundColor: '#1f2937',
-              },
-              horzLine: {
-                color: '#94a3b8',
-                width: 1,
-                style: 3,
-                labelBackgroundColor: '#1f2937',
-              },
-            },
-            leftPriceScale: {
-              visible: true,
-              borderVisible: false,
-              scaleMargins: {
-                top: 0.1,
-                bottom: 0.1,
-              },
-            },
-            localization: {
-              priceFormatter: (price) => {
-                // Remove decimals for values >= 1000, show 2 decimals for smaller values
-                if (Math.abs(price) >= 1000) {
-                  return new Intl.NumberFormat('en-US', {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 0,
-                  }).format(price);
-                } else if (Math.abs(price) >= 1) {
-                  return new Intl.NumberFormat('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  }).format(price);
-                } else {
-                  return new Intl.NumberFormat('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 4,
-                  }).format(price);
-                }
-              },
-            },
-            rightPriceScale: {
-              visible: false,
-            },
-            timeScale: {
-              borderVisible: false,
-              timeVisible: false,
-              secondsVisible: false,
-            },
-            handleScroll: false,
-            handleScale: false,
-            watermark: {
-              visible: false,
-            },
-          });
-
-          // v4 API: addAreaSeries
-          const series = chart.addAreaSeries({
-            lineColor: colors.line,
-            topColor: colors.top,
-            bottomColor: colors.bottom,
-            lineWidth: 2,
-            crosshairMarkerVisible: false,
-            lastValueVisible: false,
-            priceLineVisible: false,
-          });
-
-          // Convert data to Lightweight Charts format
-          // Lightweight Charts expects time as Unix timestamp (seconds) as a string or number
-          const data = points
-            .filter(p => p && typeof p.t === 'number' && typeof p.v === 'number' && !isNaN(p.v))
-            .map(p => ({
-              time: Math.floor(p.t / 1000), // Unix timestamp in seconds
-              value: Number(p.v)
-            }))
-            .sort((a, b) => a.time - b.time);
-
-          console.log('Rendering', data.length, 'points for', metalKey, '- sample:', data.slice(0, 3));
-
-          if (data.length < 2) {
-            throw new Error('Not enough valid data points after filtering');
-          }
-
-          series.setData(data);
-          chart.timeScale().fitContent();
-
-          // Handle resize with safeguards - observe the CARD, not the chart container
-          let resizeFrame = null;
-          const resizeObserver = new ResizeObserver(() => {
-            if (resizeFrame) cancelAnimationFrame(resizeFrame);
-            resizeFrame = requestAnimationFrame(() => {
-              if (chart && card) {
-                // Use card width minus padding (22px * 2 = 44px)
-                const newWidth = card.clientWidth - 44;
-                const currentWidth = chart.options().width;
-                if (newWidth > 0 && newWidth !== currentWidth) {
-                  chart.applyOptions({ width: newWidth });
-                }
-              }
-            });
-          });
-          // Observe the CARD element, not the chart container
-          resizeObserver.observe(card || container);
-
-          // Store chart instance and observer
-          chartInstances.set(container, { chart, observer: resizeObserver });
-        } catch (error) {
-          console.error('Error rendering chart for', metalKey, ':', error, points);
-          container.innerHTML = '<div style="text-align:center;padding:20px;color:#ef4444;">Chart error: ' + error.message + '</div>';
-        }
-      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+      else init();
     </script>
   </body>
   </html>

@@ -11,5 +11,6 @@ dist/
 # Local files
 .DS_Store
 exports/
+data/
 
 # Node\nnode_modules\n.env\ndist\n
