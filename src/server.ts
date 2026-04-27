@@ -209,14 +209,15 @@ function handleTimeseries(symbol: string, req: express.Request, res: express.Res
 	res.setHeader("Cache-Control", "no-store");
 	const series = timeseriesBySymbol.get(symbol) ?? [];
 	const sinceTs = Number(req.query?.since_ts ?? 0);
+	let points: SeriesPoint[];
 	if (Number.isFinite(sinceTs) && sinceTs > 0) {
-		const points = series.filter(p => p.t >= sinceTs);
-		return res.json({ success: true, data: { points } });
+		points = series.filter(p => p.t >= sinceTs);
+	} else {
+		const limitParam = Number((req.query?.limit as string) ?? "100");
+		const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, MAX_SERIES_POINTS) : 100;
+		points = series.slice(-limit);
 	}
-	const limitParam = Number((req.query?.limit as string) ?? "100");
-	const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, MAX_SERIES_POINTS) : 100;
-	const points = series.slice(-limit);
-	return res.json({ success: true, data: { points } });
+	return res.json({ success: true, data: { points, seedPending: !seedComplete } });
 }
 
 async function handleChange(symbol: string, req: express.Request, res: express.Response) {
