@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git push*)",
+            "command": "cmd=$(jq -r '.tool_input.command'); echo \"$cmd\" | grep -q 'git push' && { cd /home/user/DashSerious && npm run build && npm test; } || true",
+            "timeout": 120,
+            "statusMessage": "Running QA (build + tests) before push..."
+          }
+        ]
+      }
+    ]
+  }
+}

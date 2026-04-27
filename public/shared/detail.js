@@ -59,7 +59,8 @@
       }
     }
 
-    async function loadChart() {
+    async function loadChart(_retry) {
+      const retry = typeof _retry === 'number' ? _retry : 0;
       const tfVal = tfSel?.value || '360';
       const isAll = tfVal === 'all';
       const days = isAll ? 0 : (Number(tfVal) || 360);
@@ -71,6 +72,11 @@
         const ts = await DashChart.fetchWithRetry(url, { retries: 0 });
         let points = (ts.data.points || []).slice().sort((a, b) => a.t - b.t);
         points = DashChart.applyPeriodicity(points, periodicity);
+        if (points.length < 2 && ts.data.seedPending && retry < 6) {
+          if (chartEl) chartEl.innerHTML = '<div style="text-align:center;padding:20px;color:#94a3b8;font-size:0.8rem">Loading historical data…</div>';
+          setTimeout(() => loadChart(retry + 1), 2500);
+          return;
+        }
         DashChart.renderChart(chartEl, points, { metalKey, height: chartHeight });
       } catch { /* chart optional on error */ }
     }
