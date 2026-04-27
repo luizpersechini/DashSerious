@@ -352,8 +352,9 @@ setInterval(() => {
 		}
 
 		if (!hasData) {
-			// No data at all — fetch the full depth window.
+			// No data at all — fetch newest first so the most recent window is available immediately.
 			pushChunks(targetStart, yesterday);
+			ranges.reverse();
 		} else {
 			// Backfill: we need older data than what's on disk.
 			const oldestDate = new Date(oldestMs);
