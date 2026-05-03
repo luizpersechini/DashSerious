@@ -1,222 +1,1077 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Commodities Dashboard</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/styles.css" />
-    <script src="/lib/lightweight-charts/lightweight-charts.standalone.production.js"></script>
-    <script src="/shared/chart.js" defer></script>
-  </head>
-  <body>
-    <div class="appbar">
-      <div class="brand">Commodities Dashboard</div>
-      <div style="margin-left:auto; display:flex; align-items:center; gap:12px;">
-        <button id="refreshBtn" class="refresh-btn" title="Refresh data from API">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M2 2v4h4M14 14v-4h-4M2.5 9A6 6 0 0 1 14 6M13.5 7A6 6 0 0 1 2 10"/>
-          </svg>
-          Refresh
-        </button>
-        <span class="badge">Last update: <span id="lastUpdated">—</span></span>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Commodities — Market Overview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #080809;
+      --surface: #0f0f11;
+      --border: #1c1c20;
+      --border-strong: #2a2a30;
+      --text: #e8e8ec;
+      --muted: #5a5a68;
+      --dim: #2e2e38;
+
+      /* Metal accent colors — oklch, all same chroma/lightness, vary hue */
+      --gold:      oklch(0.72 0.14 72);
+      --silver:    oklch(0.72 0.04 240);
+      --platinum:  oklch(0.72 0.04 200);
+      --palladium: oklch(0.72 0.14 210);
+      --copper:    oklch(0.72 0.14 40);
+      --nickel:    oklch(0.72 0.14 155);
+      --cobalt:    oklch(0.72 0.14 260);
+      --brl:       oklch(0.72 0.14 130);
+
+      --font-mono: 'DM Mono', 'Courier New', monospace;
+      --font-sans: 'Syne', system-ui, sans-serif;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); }
+
+    body {
+      font-family: var(--font-sans);
+      overflow-x: hidden;
+    }
+
+    /* ─── Scrollbar ─── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px; }
+
+    #root { min-height: 100vh; }
+
+    /* ─── Micro sparkline canvas (drawn inline) ─── */
+    .spark { display: block; width: 100%; height: 100%; }
+
+    /* ─── Skeleton shimmer ─── */
+    @keyframes shimmer {
+      0%   { background-position: -400px 0; }
+      100% { background-position:  400px 0; }
+    }
+    .skel {
+      display: inline-block;
+      background: linear-gradient(90deg, var(--dim) 0%, #35353f 50%, var(--dim) 100%);
+      background-size: 400px 100%;
+      animation: shimmer 1.4s ease-in-out infinite;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+// ─── TWEAK DEFAULTS ──────────────────────────────────────────────────────────
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "layout": "editorial",
+  "density": "comfortable",
+  "chartStyle": "bar",
+  "showChange": true,
+  "heroMetal": "NI",
+  "colorScheme": "dark"
+}/*EDITMODE-END*/;
+
+// ─── DATA ────────────────────────────────────────────────────────────────────
+// Hex colors matching the oklch values — Canvas 2D can't parse oklch directly
+const METALS = [
+  { key: 'XAU', name: 'Gold',      symbol: 'XAU', unit: 'USD/oz',   color: '#d4a43a', cssColor: 'var(--gold)',      fmt: v => `$${v.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}` },
+  { key: 'XAG', name: 'Silver',    symbol: 'XAG', unit: 'USD/oz',   color: '#a0aec0', cssColor: 'var(--silver)',    fmt: v => `$${v.toFixed(2)}` },
+  { key: 'XPT', name: 'Platinum',  symbol: 'XPT', unit: 'USD/oz',   color: '#94a3b8', cssColor: 'var(--platinum)',  fmt: v => `$${v.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}` },
+  { key: 'XPD', name: 'Palladium', symbol: 'XPD', unit: 'USD/oz',   color: '#4db8d4', cssColor: 'var(--palladium)', fmt: v => `$${v.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}` },
+  { key: 'XCU', name: 'Copper',    symbol: 'XCU', unit: 'USD/lb',   color: '#d4773a', cssColor: 'var(--copper)',    fmt: v => `$${v.toFixed(4)}` },
+  { key: 'NI',  name: 'Nickel',    symbol: 'NI',  unit: 'USD/lb',   color: '#3ab87a', cssColor: 'var(--nickel)',    fmt: v => `$${v.toFixed(4)}` },
+  { key: 'XCO', name: 'Cobalt',    symbol: 'XCO', unit: 'USD/ton',  color: '#4a7fd4', cssColor: 'var(--cobalt)',    fmt: v => `$${Math.round(v).toLocaleString('en-US')}` },
+  { key: 'BRL', name: 'USD/BRL',   symbol: 'BRL', unit: 'BRL/USD',  color: '#5ab83a', cssColor: 'var(--brl)',       fmt: v => v.toFixed(4) },
+];
+
+// ─── LOAD TIMESERIES ─────────────────────────────────────────────────────────
+async function loadData() {
+  const res = await fetch('/api/allmetals/timeseries?limit=2000');
+  const json = await res.json();
+  return json; // { success: true, symbols: { XAU: [{t,v},...], ... } }
+}
+
+function getPoints(data, symbol, days = 365) {
+  const all = (data?.symbols?.[symbol] || []).slice().sort((a,b) => a.t - b.t);
+  if (days === 0) return all;
+  return all.slice(-days);
+}
+
+function computeChange(points) {
+  if (!points || points.length < 2) return null;
+  const first = points[0].v;
+  const last  = points[points.length - 1].v;
+  const pct   = ((last - first) / first) * 100;
+  return { pct, abs: last - first, direction: pct > 0.05 ? 'up' : pct < -0.05 ? 'down' : 'flat' };
+}
+
+// ─── SPARKLINE ───────────────────────────────────────────────────────────────
+function Sparkline({ points, color, style = 'area', height = 80 }) {
+  const canvasRef = useRef(null);
+  const animRef   = useRef(null);
+  const progressRef = useRef(0);
+
+  useEffect(() => {
+    if (!points || points.length < 2) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.offsetWidth;
+    const H = height;
+    canvas.width  = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const vals  = points.map(p => p.v);
+    const min   = Math.min(...vals);
+    const max   = Math.max(...vals);
+    const range = max - min || 1;
+    const pad   = 6;
+
+    const xOf = i => pad + (i / (points.length - 1)) * (W - pad * 2);
+    const yOf = v => H - pad - ((v - min) / range) * (H - pad * 2);
+
+    // color is a hex string like '#d4a43a' — parse to r,g,b for canvas rgba
+    function hexToRgb(hex) {
+      const h = hex.replace('#','');
+      const n = parseInt(h.length === 3
+        ? h.split('').map(c=>c+c).join('') : h, 16);
+      return [(n>>16)&255, (n>>8)&255, n&255];
+    }
+    const [r, g, b] = hexToRgb(color);
+    const solidColor = `rgb(${r},${g},${b})`;
+    const fillColor  = `rgba(${r},${g},${b},0.18)`;
+    const barColor   = `rgba(${r},${g},${b},0.28)`;
+
+    function draw(t) {
+      ctx.clearRect(0, 0, W, H);
+      const n = Math.max(2, Math.floor(points.length * t));
+
+      // Area fill
+      if (style === 'area') {
+        const grad = ctx.createLinearGradient(0, 0, 0, H);
+        grad.addColorStop(0, fillColor);
+        grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        ctx.beginPath();
+        ctx.moveTo(xOf(0), yOf(points[0].v));
+        for (let i = 1; i < n; i++) ctx.lineTo(xOf(i), yOf(points[i].v));
+        ctx.lineTo(xOf(n - 1), H);
+        ctx.lineTo(xOf(0), H);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+      }
+
+      // Line
+      ctx.beginPath();
+      ctx.moveTo(xOf(0), yOf(points[0].v));
+      for (let i = 1; i < n; i++) ctx.lineTo(xOf(i), yOf(points[i].v));
+      ctx.strokeStyle = solidColor;
+      ctx.lineWidth = style === 'bar' ? 1 : 1.5;
+      ctx.lineJoin = 'round';
+      ctx.lineCap  = 'round';
+      ctx.stroke();
+
+      // Bar style overlay
+      if (style === 'bar') {
+        for (let i = 0; i < n; i++) {
+          const bw = Math.max(1, (W - pad * 2) / points.length - 1);
+          ctx.fillStyle = barColor;
+          ctx.fillRect(xOf(i) - bw/2, yOf(points[i].v), bw, H - yOf(points[i].v));
+        }
+      }
+    }
+
+    // Animate in
+    const start = performance.now();
+    const dur   = 800;
+    function frame(now) {
+      const p = Math.min(1, (now - start) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      draw(eased);
+      if (p < 1) animRef.current = requestAnimationFrame(frame);
+    }
+    animRef.current = requestAnimationFrame(frame);
+
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, [points, color, style, height]);
+
+  return <canvas ref={canvasRef} className="spark" style={{ height }} />;
+}
+
+// ─── CHANGE BADGE ─────────────────────────────────────────────────────────────
+function ChangeBadge({ change, large }) {
+  if (!change) return <span className="skel" style={{ width: 60, height: 18 }} />;
+  const sign  = change.direction === 'up' ? '+' : '';
+  const arrow = change.direction === 'up' ? '↑' : change.direction === 'down' ? '↓' : '→';
+  const clr   = change.direction === 'up'   ? 'oklch(0.72 0.15 155)'
+              : change.direction === 'down'  ? 'oklch(0.72 0.15 20)'
+              : 'var(--muted)';
+
+  return (
+    <span style={{
+      fontFamily: 'var(--font-mono)',
+      fontSize:   large ? 14 : 11,
+      fontWeight: 500,
+      color:      clr,
+      letterSpacing: '-0.02em',
+      display:    'flex',
+      alignItems: 'center',
+      gap:        4,
+    }}>
+      <span style={{ fontSize: large ? 16 : 13 }}>{arrow}</span>
+      {sign}{change.pct.toFixed(2)}%
+    </span>
+  );
+}
+
+// ─── HERO CARD ───────────────────────────────────────────────────────────────
+function HeroCard({ metal, points, change, tweaks, onExpand }) {
+  const [hovered, setHovered] = useState(false);
+  const latest = points?.[points.length - 1]?.v;
+
+  return (
+    <div
+      onClick={onExpand}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position:   'relative',
+        background: 'var(--surface)',
+        border:     `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
+        borderLeft: `3px solid ${metal.cssColor}`,
+        padding:    '28px 32px',
+        display:    'grid',
+        gridTemplateColumns: '1fr 1.8fr',
+        gap:        32,
+        alignItems: 'center',
+        cursor:     'pointer',
+        transition: 'border-color 0.15s ease, transform 0.15s ease',
+        transform:  hovered ? 'translateY(-1px)' : 'none',
+      }}
+    >
+      {/* Left: meta + price */}
+      <div>
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize:   11,
+            letterSpacing: '0.12em',
+            color:      metal.cssColor,
+            fontWeight: 500,
+            textTransform: 'uppercase',
+          }}>{metal.symbol}</span>
+          <span style={{ color:'var(--dim)', fontSize:11 }}>—</span>
+          <span style={{ color:'var(--muted)', fontSize:11, fontFamily:'var(--font-mono)', letterSpacing:'0.06em' }}>{metal.unit}</span>
+        </div>
+
+        <div style={{ fontFamily:'var(--font-sans)', fontSize:13, color:'var(--muted)', marginBottom:6, fontWeight:500, letterSpacing:'0.04em', textTransform:'uppercase' }}>
+          {metal.name}
+        </div>
+
+        <div style={{
+          fontFamily:    'var(--font-mono)',
+          fontSize:      38,
+          fontWeight:    300,
+          letterSpacing: '-0.04em',
+          lineHeight:    1,
+          marginBottom:  12,
+          color:         'var(--text)',
+        }}>
+          {latest != null ? metal.fmt(latest) : <span className="skel" style={{ width:200, height:38 }} />}
+        </div>
+
+        {tweaks.showChange && (
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <ChangeBadge change={change} large />
+            <span style={{ color:'var(--muted)', fontSize:11, fontFamily:'var(--font-mono)' }}>1yr</span>
+          </div>
+        )}
+
+        {/* Mini stats row */}
+        {points && points.length > 1 && (() => {
+          const vals = points.map(p=>p.v);
+          const lo   = Math.min(...vals);
+          const hi   = Math.max(...vals);
+          return (
+            <div style={{ display:'flex', gap:24, marginTop:20, paddingTop:16, borderTop:'1px solid var(--border)' }}>
+              {[['Low', metal.fmt(lo)], ['High', metal.fmt(hi)]].map(([lbl, val]) => (
+                <div key={lbl}>
+                  <div style={{ fontSize:10, color:'var(--muted)', fontFamily:'var(--font-mono)', letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>{lbl}</div>
+                  <div style={{ fontSize:13, fontFamily:'var(--font-mono)', fontWeight:400, letterSpacing:'-0.02em' }}>{val}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Right: big chart */}
+      <div style={{ height: 140, position:'relative' }}>
+        <Sparkline points={points} color={metal.color} style={tweaks.chartStyle} height={140} />
+      </div>
+
+      {/* Subtle corner label */}
+      <div style={{
+        position:  'absolute',
+        top:       12,
+        right:     16,
+        fontSize:  10,
+        fontFamily:'var(--font-mono)',
+        color:     'var(--dim)',
+        letterSpacing: '0.08em',
+      }}>1YR</div>
+    </div>
+  );
+}
+
+// ─── COMPACT CARD ────────────────────────────────────────────────────────────
+function CompactCard({ metal, points, change, tweaks, dense, onExpand }) {
+  const [hovered, setHovered] = useState(false);
+  const latest = points?.[points.length - 1]?.v;
+
+  return (
+    <div
+      onClick={onExpand}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position:   'relative',
+        background: 'var(--surface)',
+        border:     `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
+        borderLeft: `3px solid ${metal.cssColor}`,
+        padding:    dense ? '16px 18px' : '20px 22px',
+        display:    'flex',
+        flexDirection: 'column',
+        gap:        dense ? 6 : 10,
+        cursor:     'pointer',
+        transition: 'border-color 0.15s ease, transform 0.15s ease',
+        transform:  hovered ? 'translateY(-1px)' : 'none',
+      }}
+    >
+      {/* Header row */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline' }}>
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize:   10,
+          letterSpacing: '0.12em',
+          color:      metal.cssColor,
+          fontWeight: 500,
+          textTransform: 'uppercase',
+        }}>{metal.symbol}</span>
+        {tweaks.showChange && <ChangeBadge change={change} />}
+      </div>
+
+      {/* Price */}
+      <div style={{
+        fontFamily:    'var(--font-mono)',
+        fontSize:      dense ? 22 : 26,
+        fontWeight:    300,
+        letterSpacing: '-0.04em',
+        lineHeight:    1,
+        color:         'var(--text)',
+      }}>
+        {latest != null ? metal.fmt(latest) : <span className="skel" style={{ width:120, height:26 }} />}
+      </div>
+
+      {/* Name + unit */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <span style={{ fontSize:11, color:'var(--muted)', fontFamily:'var(--font-sans)', fontWeight:500 }}>{metal.name}</span>
+        <span style={{ fontSize:10, color:'var(--dim)', fontFamily:'var(--font-mono)', letterSpacing:'0.06em' }}>{metal.unit}</span>
+      </div>
+
+      {/* Sparkline */}
+      <div style={{ height: dense ? 50 : 64, marginTop:4 }}>
+        <Sparkline points={points} color={metal.color} style={tweaks.chartStyle} height={dense ? 50 : 64} />
+      </div>
+
+      {/* Hover hint */}
+      {hovered && (
+        <div style={{
+          position:   'absolute',
+          bottom:     10,
+          right:      12,
+          fontSize:   9,
+          fontFamily: 'var(--font-mono)',
+          letterSpacing:'0.08em',
+          color:      'var(--dim)',
+          textTransform:'uppercase',
+        }}>Click to expand →</div>
+      )}
+    </div>
+  );
+}
+
+// ─── EXPANDED DETAIL PANEL ───────────────────────────────────────────────────
+function DetailPanel({ metal, points, change, onClose, tweaks }) {
+  const [tf, setTf] = useState(365);
+  const [chartStyle, setChartStyle] = useState(tweaks.chartStyle);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    // Double-rAF ensures the initial render has committed before the transition fires
+    let id1, id2;
+    id1 = requestAnimationFrame(() => {
+      id2 = requestAnimationFrame(() => setVisible(true));
+    });
+    return () => { cancelAnimationFrame(id1); cancelAnimationFrame(id2); };
+  }, []);
+
+  const handleClose = () => {
+    setVisible(false);
+    setTimeout(onClose, 280);
+  };
+
+  // Slice points to selected timeframe
+  const allForMetal = points?.slice() || [];
+  const sliced = tf === 0 ? allForMetal : allForMetal.slice(-tf);
+  const latest = sliced[sliced.length - 1]?.v;
+  const localChange = computeChange(sliced);
+
+  const vals = sliced.map(p => p.v);
+  const lo = vals.length ? Math.min(...vals) : null;
+  const hi = vals.length ? Math.max(...vals) : null;
+
+  // Compute period return buckets
+  const tfs = [
+    { label: '30D',  days: 30 },
+    { label: '90D',  days: 90 },
+    { label: '1Y',   days: 365 },
+    { label: '3Y',   days: 1095 },
+    { label: 'ALL',  days: 0 },
+  ];
+
+  const periodReturns = tfs.map(({ label, days }) => {
+    const pts = days === 0 ? allForMetal : allForMetal.slice(-days);
+    const ch = computeChange(pts);
+    return { label, pct: ch?.pct ?? null, dir: ch?.direction ?? 'flat' };
+  });
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
+      style={{
+        position:   'fixed',
+        inset:      0,
+        zIndex:     100,
+        background: visible ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0)',
+        backdropFilter: visible ? 'blur(4px)' : 'blur(0px)',
+        transition: 'background 0.28s ease, backdrop-filter 0.28s ease',
+        display:    'flex',
+        alignItems: 'stretch',
+        justifyContent: 'flex-end',
+      }}
+    >
+      {/* Drawer */}
+      <div style={{
+        width:      'min(560px, 95vw)',
+        background: '#0c0c0e',
+        borderLeft: `3px solid ${metal.cssColor}`,
+        display:    'flex',
+        flexDirection: 'column',
+        transform:  visible ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
+        overflowY:  'auto',
+      }}>
+        {/* Drawer header */}
+        <div style={{
+          padding:      '20px 24px 16px',
+          borderBottom: '1px solid var(--border)',
+          display:      'flex',
+          alignItems:   'flex-start',
+          justifyContent: 'space-between',
+          position:     'sticky',
+          top:          0,
+          background:   '#0c0c0e',
+          zIndex:       2,
+        }}>
+          <div>
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}>
+              <span style={{
+                fontFamily:   'var(--font-mono)',
+                fontSize:     10,
+                letterSpacing:'0.14em',
+                color:        metal.cssColor,
+                fontWeight:   500,
+                textTransform:'uppercase',
+              }}>{metal.symbol}</span>
+              <span style={{ color:'var(--dim)', fontSize:10, fontFamily:'var(--font-mono)' }}>{metal.unit}</span>
+            </div>
+            <div style={{
+              fontFamily:    'var(--font-mono)',
+              fontSize:      40,
+              fontWeight:    300,
+              letterSpacing: '-0.04em',
+              lineHeight:    1,
+              color:         'var(--text)',
+            }}>
+              {latest != null ? metal.fmt(latest) : '—'}
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:12, marginTop:8 }}>
+              <ChangeBadge change={localChange} large />
+              <span style={{ fontSize:10, color:'var(--dim)', fontFamily:'var(--font-mono)' }}>
+                {tf === 0 ? 'ALL TIME' : tf + 'D PERIOD'}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={handleClose}
+            style={{
+              background:   'none',
+              border:       '1px solid var(--border)',
+              color:        'var(--muted)',
+              width:        32,
+              height:       32,
+              cursor:       'pointer',
+              fontFamily:   'var(--font-mono)',
+              fontSize:     16,
+              display:      'flex',
+              alignItems:   'center',
+              justifyContent: 'center',
+              flexShrink:   0,
+            }}
+          >×</button>
+        </div>
+
+        {/* Chart area */}
+        <div style={{ padding:'20px 24px 0' }}>
+          {/* TF + style controls */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+            <TimeframeSelector value={tf} onChange={setTf} />
+            <div style={{ display:'flex', gap:2 }}>
+              {['area','line','bar'].map(s => (
+                <button key={s} onClick={() => setChartStyle(s)} style={{
+                  background:    chartStyle === s ? 'var(--dim)' : 'none',
+                  border:        '1px solid ' + (chartStyle === s ? 'var(--border-strong)' : 'transparent'),
+                  color:         chartStyle === s ? 'var(--text)' : 'var(--muted)',
+                  fontFamily:    'var(--font-mono)',
+                  fontSize:      10,
+                  letterSpacing: '0.06em',
+                  padding:       '4px 9px',
+                  cursor:        'pointer',
+                  textTransform: 'capitalize',
+                }}>{s}</button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ height: 220 }}>
+            <Sparkline points={sliced} color={metal.color} style={chartStyle} height={220} />
+          </div>
+        </div>
+
+        {/* Stats grid */}
+        <div style={{ padding:'20px 24px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+          {[
+            { label: 'Current',   value: latest != null ? metal.fmt(latest) : '—' },
+            { label: 'Period Low', value: lo != null ? metal.fmt(lo) : '—' },
+            { label: 'Period High',value: hi != null ? metal.fmt(hi) : '—' },
+            { label: 'Data Points',value: sliced.length.toLocaleString() },
+          ].map(({ label, value }) => (
+            <div key={label} style={{
+              background:   'var(--surface)',
+              border:       '1px solid var(--border)',
+              padding:      '14px 16px',
+            }}>
+              <div style={{ fontSize:9, fontFamily:'var(--font-mono)', letterSpacing:'0.1em', color:'var(--muted)', textTransform:'uppercase', marginBottom:6 }}>{label}</div>
+              <div style={{ fontSize:16, fontFamily:'var(--font-mono)', fontWeight:300, letterSpacing:'-0.03em', color:'var(--text)' }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Period returns table */}
+        <div style={{ padding:'0 24px 24px' }}>
+          <div style={{ fontSize:9, fontFamily:'var(--font-mono)', letterSpacing:'0.1em', color:'var(--muted)', textTransform:'uppercase', marginBottom:10 }}>Period Returns</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+            {periodReturns.map(({ label, pct, dir }) => (
+              <div key={label} style={{
+                display:        'flex',
+                alignItems:     'center',
+                justifyContent: 'space-between',
+                padding:        '9px 14px',
+                background:     'var(--surface)',
+                border:         '1px solid var(--border)',
+              }}>
+                <span style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--muted)', letterSpacing:'0.06em' }}>{label}</span>
+                <span style={{
+                  fontFamily:    'var(--font-mono)',
+                  fontSize:      13,
+                  fontWeight:    400,
+                  letterSpacing: '-0.02em',
+                  color: pct == null ? 'var(--dim)'
+                       : dir === 'up'   ? 'oklch(0.72 0.15 155)'
+                       : dir === 'down'  ? 'oklch(0.72 0.15 20)'
+                       : 'var(--muted)',
+                }}>
+                  {pct == null ? '—' : `${pct > 0 ? '+' : ''}${pct.toFixed(2)}%`}
+                </span>
+                {/* Bar indicator */}
+                {pct != null && (
+                  <div style={{ width:80, height:3, background:'var(--border)', marginLeft:12, position:'relative', overflow:'hidden' }}>
+                    <div style={{
+                      position:   'absolute',
+                      left:       pct < 0 ? `${50 + Math.max(-50, pct/2)}%` : '50%',
+                      width:      `${Math.min(50, Math.abs(pct)/2)}%`,
+                      height:     '100%',
+                      background: dir === 'up' ? 'oklch(0.72 0.15 155)' : 'oklch(0.72 0.15 20)',
+                    }} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:'0 24px 24px', marginTop:'auto' }}>
+          <div style={{ paddingTop:16, borderTop:'1px solid var(--border)', fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.06em' }}>
+            {metal.name.toUpperCase()} · {metal.unit} · LIVE DATA
+          </div>
+        </div>
       </div>
     </div>
-    <main class="container">
-      <div id="cards"></div>
-    </main>
+  );
+}
 
-    <script>
-      const METALS = [
-        { name: 'Gold',      key: 'gold',      symbol: 'XAU' },
-        { name: 'Silver',    key: 'silver',    symbol: 'XAG' },
-        { name: 'Platinum',  key: 'platinum',  symbol: 'XPT' },
-        { name: 'Palladium', key: 'palladium', symbol: 'XPD' },
-        { name: 'Copper',    key: 'copper',    symbol: 'XCU' },
-        { name: 'Nickel',    key: 'nickel',    symbol: 'NI'  },
-        { name: 'Cobalt',    key: 'cobalt',    symbol: 'XCO' },
-        { name: 'USD/BRL',   key: 'brl',       symbol: 'BRL' },
-      ];
+// ─── HEADER ──────────────────────────────────────────────────────────────────
+function Header({ lastUpdated, onRefresh, refreshing }) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric', year:'numeric' });
 
-      const METAL_CLASS = {
-        gold: 'metal-gold', silver: 'metal-silver', platinum: 'metal-platinum',
-        palladium: 'metal-palladium', copper: 'metal-copper',
-        nickel: 'metal-nickel', cobalt: 'metal-cobalt'
-      };
+  return (
+    <header style={{
+      position:     'sticky',
+      top:          0,
+      zIndex:       50,
+      background:   'rgba(8,8,9,0.88)',
+      backdropFilter: 'blur(12px)',
+      borderBottom: '1px solid var(--border)',
+      padding:      '0 32px',
+      height:       52,
+      display:      'flex',
+      alignItems:   'center',
+      gap:          20,
+    }}>
+      {/* Brand */}
+      <div style={{ display:'flex', alignItems:'baseline', gap:10 }}>
+        <span style={{
+          fontFamily: 'var(--font-sans)',
+          fontSize:   13,
+          fontWeight: 700,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color:      'var(--text)',
+        }}>Commodities</span>
+        <span style={{ color:'var(--dim)', fontSize:12, fontFamily:'var(--font-mono)' }}>/</span>
+        <span style={{ color:'var(--muted)', fontSize:11, fontFamily:'var(--font-mono)' }}>Market Overview</span>
+      </div>
 
-      const nf2 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
-      const nf0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-      const fxFmt = new Intl.NumberFormat('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+      {/* Separator */}
+      <div style={{ flex:1 }} />
 
-      function formatPrice(key, d) {
-        if (key === 'brl')    return `${fxFmt.format(d.fxUsdBrl ?? 0)} <span class="unit">USD/BRL</span>`;
-        if (key === 'copper' || key === 'nickel')
-                              return `${nf2.format(d.usdPerPound ?? 0)} <span class="unit">USD/lb</span>`;
-        if (key === 'cobalt') return `${nf0.format(d.usdPerMetricTon ?? 0)} <span class="unit">USD/ton</span>`;
-        return `${nf2.format(d.usdPerOunce)} <span class="unit">USD/oz</span>`;
-      }
+      {/* Date */}
+      <span style={{ fontSize:11, fontFamily:'var(--font-mono)', color:'var(--muted)', letterSpacing:'0.04em' }}>
+        {dateStr}
+      </span>
 
-      function createCard(parent, title, metalKey) {
-        const div = document.createElement('div');
-        div.className = `card ${METAL_CLASS[metalKey] || ''}`;
-        div.dataset.metal = metalKey;
-        div.innerHTML = `
-          <div class="title">${title}</div>
-          <div class="value price"><span class="skeleton"></span></div>
-          <div class="controls">
-            <label class="muted" style="margin-right:auto">Chart</label>
-            <select class="tf" aria-label="Timeframe">
-              <option value="30">30d</option>
-              <option value="90">90d</option>
-              <option value="180">180d</option>
-              <option value="360" selected>1yr</option>
-              <option value="730">2yr</option>
-              <option value="1095">3yr</option>
-              <option value="1825">5yr</option>
-              <option value="all">All</option>
-            </select>
-            <select class="per" aria-label="Periodicity">
-              <option value="daily" selected>Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
+      {/* Last updated */}
+      {lastUpdated && (
+        <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.04em' }}>
+          Updated {lastUpdated}
+        </span>
+      )}
+
+      {/* Refresh */}
+      <button
+        onClick={onRefresh}
+        disabled={refreshing}
+        style={{
+          background:   'none',
+          border:       '1px solid var(--border)',
+          color:        refreshing ? 'var(--dim)' : 'var(--muted)',
+          fontFamily:   'var(--font-mono)',
+          fontSize:     10,
+          letterSpacing:'0.08em',
+          textTransform:'uppercase',
+          padding:      '5px 12px',
+          cursor:       refreshing ? 'not-allowed' : 'pointer',
+          transition:   'color 0.15s, border-color 0.15s',
+          display:      'flex',
+          alignItems:   'center',
+          gap:          6,
+        }}
+        onMouseEnter={e => { if (!refreshing) { e.target.style.color = 'var(--text)'; e.target.style.borderColor = 'var(--border-strong)'; }}}
+        onMouseLeave={e => { e.target.style.color = 'var(--muted)'; e.target.style.borderColor = 'var(--border)'; }}
+      >
+        <span style={{
+          display:     'inline-block',
+          animation:   refreshing ? 'spin 0.8s linear infinite' : 'none',
+        }}>↻</span>
+        Refresh
+      </button>
+    </header>
+  );
+}
+
+// ─── TICKER TAPE ─────────────────────────────────────────────────────────────
+function TickerTape({ metals, metalData, allPoints }) {
+  const items = metals.map(m => {
+    const pts    = allPoints[m.key] || [];
+    const latest = pts[pts.length - 1]?.v;
+    const change = computeChange(pts);
+    return { m, latest, change };
+  });
+
+  return (
+    <div style={{
+      borderBottom: '1px solid var(--border)',
+      background:   'var(--bg)',
+      padding:      '0 32px',
+      height:       36,
+      display:      'flex',
+      alignItems:   'center',
+      gap:          0,
+      overflowX:    'auto',
+      scrollbarWidth: 'none',
+    }}>
+      {items.map(({ m, latest, change }, i) => (
+        <React.Fragment key={m.key}>
+          {i > 0 && <span style={{ color:'var(--border-strong)', margin:'0 16px', fontSize:11 }}>|</span>}
+          <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+            <span style={{
+              fontSize:    10,
+              fontFamily:  'var(--font-mono)',
+              letterSpacing:'0.1em',
+              color:       m.cssColor,
+              fontWeight:  500,
+            }}>{m.symbol}</span>
+            <span style={{
+              fontSize:    12,
+              fontFamily:  'var(--font-mono)',
+              fontWeight:  300,
+              letterSpacing:'-0.02em',
+              color:       'var(--text)',
+            }}>
+              {latest != null ? m.fmt(latest) : <span className="skel" style={{ width:60, height:12 }} />}
+            </span>
+            {change && (
+              <span style={{
+                fontSize:  10,
+                fontFamily:'var(--font-mono)',
+                color:     change.direction === 'up'   ? 'oklch(0.72 0.15 155)'
+                         : change.direction === 'down'  ? 'oklch(0.72 0.15 20)'
+                         : 'var(--muted)',
+              }}>
+                {change.direction === 'up' ? '+' : ''}{change.pct.toFixed(2)}%
+              </span>
+            )}
           </div>
-          <div class="chart-container"></div>
-        `;
-        div.style.cursor = 'pointer';
-        div.addEventListener('click', (e) => {
-          const t = e.target;
-          const tag = t && t.tagName ? String(t.tagName).toLowerCase() : '';
-          if (tag === 'select' || tag === 'option' || tag === 'button') return;
-          if (t && typeof t.closest === 'function' && (t.closest('.controls') || t.closest('.card-error'))) return;
-          window.location.href = '/' + metalKey + '.html';
-        });
-        parent.appendChild(div);
-        return div;
-      }
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
 
-      function showCardError(card, message, onRetry) {
-        const price = card.querySelector('.price');
-        price.innerHTML = '<span class="muted" style="font-size:1rem">Unavailable</span>';
-        let errEl = card.querySelector('.card-error');
-        if (!errEl) {
-          errEl = document.createElement('div');
-          errEl.className = 'card-error';
-          price.after(errEl);
+// ─── TIMEFRAME SELECTOR ───────────────────────────────────────────────────────
+const TF_OPTIONS = [
+  { label:'30D', days:30 },
+  { label:'90D', days:90 },
+  { label:'1Y',  days:365 },
+  { label:'3Y',  days:1095 },
+  { label:'ALL', days:0 },
+];
+
+function TimeframeSelector({ value, onChange }) {
+  return (
+    <div style={{ display:'flex', gap:2, alignItems:'center' }}>
+      {TF_OPTIONS.map(o => (
+        <button
+          key={o.label}
+          onClick={() => onChange(o.days)}
+          style={{
+            background:    value === o.days ? 'var(--dim)' : 'none',
+            border:        '1px solid ' + (value === o.days ? 'var(--border-strong)' : 'transparent'),
+            color:         value === o.days ? 'var(--text)' : 'var(--muted)',
+            fontFamily:    'var(--font-mono)',
+            fontSize:      10,
+            letterSpacing: '0.08em',
+            padding:       '4px 9px',
+            cursor:        'pointer',
+            transition:    'all 0.12s',
+          }}
+        >{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
+// ─── SECTION LABEL ────────────────────────────────────────────────────────────
+function SectionLabel({ text, sub }) {
+  return (
+    <div style={{ display:'flex', alignItems:'baseline', gap:10 }}>
+      <span style={{
+        fontSize:    10,
+        fontFamily:  'var(--font-mono)',
+        letterSpacing:'0.12em',
+        textTransform:'uppercase',
+        color:       'var(--muted)',
+        fontWeight:  500,
+      }}>{text}</span>
+      {sub && <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)' }}>{sub}</span>}
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [rawData,  setRawData]  = useState(null);
+  const [timeframe, setTimeframe] = useState(365);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedKey, setExpandedKey] = useState(null);
+
+  useEffect(() => {
+    loadData()
+      .then(d => {
+        setRawData(d);
+        setLoading(false);
+        const pts = d?.symbols?.XAU || [];
+        if (pts.length) {
+          const last = pts[pts.length - 1];
+          setLastUpdated(new Date(last.t).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }));
         }
-        errEl.innerHTML = `<span>Couldn't load — ${message || 'network error'}</span><button type="button">Retry</button>`;
-        errEl.querySelector('button').addEventListener('click', (e) => {
-          e.stopPropagation();
-          errEl.remove();
-          price.innerHTML = '<span class="skeleton"></span>';
-          onRetry();
-        });
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const allPoints = useMemo(() => {
+    if (!rawData) return {};
+    const out = {};
+    METALS.forEach(m => {
+      out[m.key] = getPoints(rawData, m.key, timeframe);
+    });
+    return out;
+  }, [rawData, timeframe]);
+
+  const allChanges = useMemo(() => {
+    const out = {};
+    METALS.forEach(m => { out[m.key] = computeChange(allPoints[m.key]); });
+    return out;
+  }, [allPoints]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetch('/api/refresh', { method: 'POST' });
+      const d = await loadData();
+      setRawData(d);
+      const pts = d?.symbols?.XAU || [];
+      if (pts.length) {
+        const last = pts[pts.length - 1];
+        setLastUpdated(new Date(last.t).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }));
       }
+    } catch(e) {}
+    finally { setRefreshing(false); }
+  }, []);
 
-      function renderChangeChip(card, pct) {
-        if (!isFinite(pct)) return;
-        const price = card.querySelector('.price');
-        let chip = card.querySelector('.change-chip');
-        if (!chip) {
-          chip = document.createElement('span');
-          chip.className = 'change-chip';
-          price.appendChild(chip);
-        }
-        const cls = pct > 0.05 ? 'up' : pct < -0.05 ? 'down' : 'flat';
-        chip.className = 'change-chip ' + cls;
-        const sign = pct > 0 ? '+' : '';
-        chip.textContent = `${sign}${pct.toFixed(2)}% 24h`;
-      }
+  // Layout variants
+  const isEditorial = tweaks.layout === 'editorial';
+  const isDense = tweaks.density === 'compact';
 
-      async function load24hChange(key, card) {
-        try {
-          const r = await DashChart.fetchWithRetry(`/api/${key}/change?date_type=yesterday`, { retries: 0, timeoutMs: 6000 });
-          const symbol = METALS.find(m => m.key === key)?.symbol;
-          const entry = r && r.rates && symbol ? r.rates[symbol] : null;
-          if (entry && typeof entry.change_pct === 'number') {
-            // For non-BRL metals, rates are units-per-USD, so a positive change_pct means USD strengthened
-            // (i.e. price went down). Invert sign so the chip reads as price change.
-            const pct = key === 'brl' ? entry.change_pct : -entry.change_pct;
-            renderChangeChip(card, pct);
-          }
-        } catch { /* chip is optional */ }
-      }
+  // Hero metal driven by tweaks
+  const heroKey   = tweaks.heroMetal || 'NI';
+  const heroMetal = METALS.find(m => m.key === heroKey) || METALS[0];
+  const restMetals = METALS.filter(m => m.key !== heroKey);
+  // Split rest into precious (XAU,XAG,XPT,XPD) and industrial (XCU,NI,XCO,BRL)
+  const PRECIOUS_KEYS = ['XAU','XAG','XPT','XPD'];
+  const preciousRest  = restMetals.filter(m => PRECIOUS_KEYS.includes(m.key));
+  const industrial    = restMetals.filter(m => !PRECIOUS_KEYS.includes(m.key));
 
-      async function loadMetal(key, card) {
-        const card_err = card.querySelector('.card-error');
-        if (card_err) card_err.remove();
-        try {
-          const data = await DashChart.fetchWithRetry(`/api/${key}/latest`);
-          const d = data.data;
-          card.querySelector('.price').innerHTML = formatPrice(key, d);
-          const top = document.getElementById('lastUpdated');
-          if (top) top.textContent = new Date(d.timestamp).toLocaleString();
-          // Fire chart + change-chip in parallel — chart is primary, chip is additive.
-          refreshChart(key, card);
-          load24hChange(key, card);
-        } catch (err) {
-          showCardError(card, err && err.message, () => loadMetal(key, card));
-        }
-      }
+  // Expanded detail
+  const expandedMetal = expandedKey ? METALS.find(m => m.key === expandedKey) : null;
 
-      async function refreshChart(key, card) {
-        const tfVal = card.querySelector('.tf').value;
-        const isAll = tfVal === 'all';
-        const days = isAll ? 0 : (Number(tfVal) || 360);
-        const periodicity = String(card.querySelector('.per')?.value || 'daily');
-        try {
-          const limit = isAll ? 9999 : days + 5;
-          const ts = await DashChart.fetchWithRetry(`/api/${key}/timeseries?limit=${limit}`, { retries: 0 });
-          let points = (ts.data.points || []).slice().sort((a, b) => a.t - b.t);
-          if (!isAll) points = points.slice(-days);
-          points = DashChart.applyPeriodicity(points, periodicity);
-          DashChart.renderChart(card.querySelector('.chart-container'), points, { metalKey: key });
-        } catch { /* chart may fail independently of price */ }
-      }
+  return (
+    <div style={{ minHeight:'100vh', background: tweaks.colorScheme === 'light' ? '#f5f4f2' : 'var(--bg)' }}>
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
 
-      let cards = [];
+      <Header lastUpdated={lastUpdated} onRefresh={handleRefresh} refreshing={refreshing} />
+      <TickerTape metals={METALS} allPoints={allPoints} />
 
-      function init() {
-        if (typeof LightweightCharts === 'undefined' || !window.DashChart) {
-          setTimeout(init, 100);
-          return;
-        }
-        const container = document.getElementById('cards');
-        METALS.forEach(m => {
-          const card = createCard(container, `${m.name} (${m.symbol})`, m.key);
-          cards.push({ key: m.key, card });
-          loadMetal(m.key, card);
-          card.querySelector('.tf')?.addEventListener('change', () => refreshChart(m.key, card));
-          card.querySelector('.per')?.addEventListener('change', () => refreshChart(m.key, card));
-        });
+      {/* Main content */}
+      <main style={{ maxWidth:1440, margin:'0 auto', padding: isDense ? '20px 24px' : '28px 32px' }}>
 
-        const refreshBtn = document.getElementById('refreshBtn');
-        if (refreshBtn) {
-          refreshBtn.addEventListener('click', async () => {
-            refreshBtn.disabled = true;
-            refreshBtn.classList.add('spinning');
-            try {
-              const res = await fetch('/api/refresh', { method: 'POST' });
-              const data = await res.json();
-              if (data.success) {
-                await Promise.all(cards.map(({ key, card }) => loadMetal(key, card)));
-              }
-            } catch (err) {
-              console.error('Refresh failed:', err);
-            } finally {
-              refreshBtn.disabled = false;
-              refreshBtn.classList.remove('spinning');
-            }
-          });
-        }
-      }
+        {/* Controls row */}
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: isDense ? 16 : 24 }}>
+          <SectionLabel text="Spot Prices" sub={`— ${timeframe === 0 ? 'All time' : timeframe + 'd window'}`} />
+          <TimeframeSelector value={timeframe} onChange={setTimeframe} />
+        </div>
 
-      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-      else init();
-    </script>
-  </body>
-  </html>
+        {isEditorial ? (
+          /* ─── EDITORIAL LAYOUT ─── */
+          <div style={{ display:'flex', flexDirection:'column', gap: isDense ? 12 : 16 }}>
 
+            {/* Hero row */}
+            <HeroCard
+              metal={heroMetal}
+              points={allPoints[heroMetal.key]}
+              change={allChanges[heroMetal.key]}
+              tweaks={tweaks}
+              onExpand={() => setExpandedKey(heroMetal.key)}
+            />
 
+            {/* Precious metals grid */}
+            {preciousRest.length > 0 && (
+              <div>
+                <div style={{ marginBottom: isDense ? 8 : 12 }}>
+                  <SectionLabel text="Precious Metals" />
+                </div>
+                <div style={{
+                  display:'grid',
+                  gridTemplateColumns:`repeat(${Math.min(preciousRest.length, 4)}, 1fr)`,
+                  gap: isDense ? 8 : 12,
+                }}>
+                  {preciousRest.map(m => (
+                    <CompactCard
+                      key={m.key}
+                      metal={m}
+                      points={allPoints[m.key]}
+                      change={allChanges[m.key]}
+                      tweaks={tweaks}
+                      dense={isDense}
+                      onExpand={() => setExpandedKey(m.key)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Industrial + FX grid */}
+            {industrial.length > 0 && (
+              <div>
+                <div style={{ marginBottom: isDense ? 8 : 12 }}>
+                  <SectionLabel text="Industrial &amp; FX" />
+                </div>
+                <div style={{
+                  display:'grid',
+                  gridTemplateColumns:`repeat(${Math.min(industrial.length, 4)}, 1fr)`,
+                  gap: isDense ? 8 : 12,
+                }}>
+                  {industrial.map(m => (
+                    <CompactCard
+                      key={m.key}
+                      metal={m}
+                      points={allPoints[m.key]}
+                      change={allChanges[m.key]}
+                      tweaks={tweaks}
+                      dense={isDense}
+                      onExpand={() => setExpandedKey(m.key)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ─── UNIFORM GRID LAYOUT ─── */
+          <div style={{
+            display:'grid',
+            gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: isDense ? 8 : 12,
+          }}>
+            {METALS.map(m => (
+              <CompactCard
+                key={m.key}
+                metal={m}
+                points={allPoints[m.key]}
+                change={allChanges[m.key]}
+                tweaks={tweaks}
+                dense={isDense}
+                onExpand={() => setExpandedKey(m.key)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={{
+          marginTop:   40,
+          paddingTop:  20,
+          borderTop:   '1px solid var(--border)',
+          display:     'flex',
+          justifyContent:'space-between',
+          alignItems:  'center',
+        }}>
+          <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.06em' }}>
+            DATA — METALPRICE.IO · LIVE
+          </span>
+          <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.06em' }}>
+            PRICES IN USD · NOT FINANCIAL ADVICE
+          </span>
+        </div>
+      </main>
+
+      {/* Detail panel */}
+      {expandedMetal && (
+        <DetailPanel
+          metal={expandedMetal}
+          points={allPoints[expandedMetal.key]}
+          change={allChanges[expandedMetal.key]}
+          onClose={() => setExpandedKey(null)}
+          tweaks={tweaks}
+        />
+      )}
+
+      {/* Tweaks panel */}
+      <TweaksPanel>
+        <TweakSection label="Featured Metal" />
+        <TweakSelect
+          label="Hero metal"
+          value={tweaks.heroMetal}
+          options={METALS.map(m => ({ value: m.key, label: m.name }))}
+          onChange={v => setTweak('heroMetal', v)}
+        />
+        <TweakSection label="Layout" />
+        <TweakRadio id="layout" label="Layout style"
+          options={[{value:'editorial',label:'Editorial'},{value:'grid',label:'Grid'}]}
+          value={tweaks.layout} onChange={v => setTweak('layout', v)} />
+        <TweakRadio id="density" label="Density"
+          options={[{value:'comfortable',label:'Comfortable'},{value:'compact',label:'Compact'}]}
+          value={tweaks.density} onChange={v => setTweak('density', v)} />
+        <TweakSection label="Charts" />
+        <TweakRadio id="chartStyle" label="Chart style"
+          options={[{value:'area',label:'Area'},{value:'line',label:'Line'},{value:'bar',label:'Bar'}]}
+          value={tweaks.chartStyle} onChange={v => setTweak('chartStyle', v)} />
+        <TweakSection label="Display" />
+        <TweakToggle id="showChange" label="Show % change"
+          value={tweaks.showChange} onChange={v => setTweak('showChange', v)} />
+      </TweaksPanel>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
