@@ -269,6 +269,19 @@ app.get("/api/metal/:name/change", (req, res) => {
 
 for (const [sym, name] of TRACKED) routeFor(sym, name);
 
+// Aggregated timeseries: returns all tracked symbols in one response.
+// Format: { success: true, symbols: { XAU: [{t,v},...], ... } }
+app.get("/api/allmetals/timeseries", (req, res) => {
+	const limitParam = Number((req.query?.limit as string) ?? "0");
+	const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, MAX_SERIES_POINTS) : 0;
+	const symbols: Record<string, SeriesPoint[]> = {};
+	for (const [sym] of TRACKED) {
+		const arr = timeseriesBySymbol.get(sym) ?? [];
+		symbols[sym] = limit > 0 ? arr.slice(-limit) : arr.slice();
+	}
+	return res.json({ success: true, symbols });
+});
+
 // Health: unblocked (not under /api), usable as a Cloud Run readiness probe.
 app.get("/health", (_req, res) => {
 	res.setHeader("Cache-Control", "no-store");
