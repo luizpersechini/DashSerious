@@ -47,7 +47,7 @@
   function applyPeriodicity(points, periodicity) {
     if (periodicity === 'weekly') return aggregateWeekly(points);
     if (periodicity === 'monthly') return aggregateMonthly(points);
-    return points;
+    return aggregateBy(points, startOfDay);
   }
 
   const DEFAULT_PRICE_FORMATTER = (price) => {
@@ -134,7 +134,8 @@
       const data = points
         .filter(p => p && typeof p.t === 'number' && typeof p.v === 'number' && !isNaN(p.v))
         .map(p => ({ time: Math.floor(p.t / 1000), value: Number(p.v) }))
-        .sort((a, b) => a.time - b.time);
+        .sort((a, b) => a.time - b.time)
+        .filter((p, i, arr) => i === 0 || p.time !== arr[i - 1].time);
 
       if (data.length < 2) throw new Error('Not enough valid data points after filtering');
       series.setData(data);
