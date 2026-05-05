@@ -245,6 +245,17 @@ function Sparkline({ points, color, style = 'area', height = 80 }) {
   return <canvas ref={canvasRef} className="spark" style={{ height, display: 'block', width: '100%' }} />;
 }
 
+// ─── useWindowWidth ──────────────────────────────────────────────────────────
+function useWindowWidth() {
+  const [width, setWidth] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return width;
+}
+
 // ─── CHANGE BADGE ─────────────────────────────────────────────────────────────
 function ChangeBadge({ change, large }) {
   if (!change) return <span className="skel" style={{ width: 60, height: 18 }} />;
@@ -272,9 +283,10 @@ function ChangeBadge({ change, large }) {
 }
 
 // ─── HERO CARD ───────────────────────────────────────────────────────────────
-function HeroCard({ metal, points, change, tweaks, onExpand }) {
+function HeroCard({ metal, points, change, tweaks, onExpand, isMobile }) {
   const [hovered, setHovered] = useState(false);
   const latest = points?.[points.length - 1]?.v;
+  const chartH = isMobile ? 110 : 140;
 
   return (
     <div
@@ -286,19 +298,20 @@ function HeroCard({ metal, points, change, tweaks, onExpand }) {
         background: 'var(--surface)',
         border:     `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
         borderLeft: `3px solid ${metal.cssColor}`,
-        padding:    '28px 32px',
-        display:    'grid',
+        padding:    isMobile ? '20px 16px' : '28px 32px',
+        display:    isMobile ? 'flex' : 'grid',
+        flexDirection: 'column',
         gridTemplateColumns: '1fr 1.8fr',
-        gap:        32,
-        alignItems: 'center',
+        gap:        isMobile ? 14 : 32,
+        alignItems: isMobile ? 'stretch' : 'center',
         cursor:     'pointer',
         transition: 'border-color 0.15s ease, transform 0.15s ease',
         transform:  hovered ? 'translateY(-1px)' : 'none',
       }}
     >
-      {/* Left: meta + price */}
+      {/* Meta + price */}
       <div>
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom: isMobile ? 10 : 16 }}>
           <span style={{
             fontFamily: 'var(--font-mono)',
             fontSize:   11,
@@ -317,14 +330,14 @@ function HeroCard({ metal, points, change, tweaks, onExpand }) {
 
         <div style={{
           fontFamily:    'var(--font-mono)',
-          fontSize:      38,
+          fontSize:      isMobile ? 30 : 38,
           fontWeight:    300,
           letterSpacing: '-0.04em',
           lineHeight:    1,
-          marginBottom:  12,
+          marginBottom:  10,
           color:         'var(--text)',
         }}>
-          {latest != null ? metal.fmt(latest) : <span className="skel" style={{ width:200, height:38 }} />}
+          {latest != null ? metal.fmt(latest) : <span className="skel" style={{ width: isMobile ? 140 : 200, height: isMobile ? 30 : 38 }} />}
         </div>
 
         {tweaks.showChange && (
@@ -334,8 +347,8 @@ function HeroCard({ metal, points, change, tweaks, onExpand }) {
           </div>
         )}
 
-        {/* Mini stats row */}
-        {points && points.length > 1 && (() => {
+        {/* Mini stats row — hide on mobile to save space */}
+        {!isMobile && points && points.length > 1 && (() => {
           const vals = points.map(p=>p.v);
           const lo   = Math.min(...vals);
           const hi   = Math.max(...vals);
@@ -352,12 +365,12 @@ function HeroCard({ metal, points, change, tweaks, onExpand }) {
         })()}
       </div>
 
-      {/* Right: big chart */}
-      <div style={{ height: 140, position:'relative' }}>
-        <Sparkline points={points} color={metal.color} style={tweaks.chartStyle} height={140} />
+      {/* Chart */}
+      <div style={{ height: chartH, position:'relative' }}>
+        <Sparkline points={points} color={metal.color} style={tweaks.chartStyle} height={chartH} />
       </div>
 
-      {/* Subtle corner label */}
+      {/* Corner label */}
       <div style={{
         position:  'absolute',
         top:       12,
@@ -449,7 +462,7 @@ function CompactCard({ metal, points, change, tweaks, dense, onExpand }) {
 }
 
 // ─── EXPANDED DETAIL PANEL ───────────────────────────────────────────────────
-function DetailPanel({ metal, points, change, onClose, tweaks }) {
+function DetailPanel({ metal, points, change, onClose, tweaks, isMobile }) {
   const [tf, setTf] = useState(365);
   const [chartStyle, setChartStyle] = useState(tweaks.chartStyle);
   const [visible, setVisible] = useState(false);
@@ -504,18 +517,23 @@ function DetailPanel({ metal, points, change, onClose, tweaks }) {
         backdropFilter: visible ? 'blur(4px)' : 'blur(0px)',
         transition: 'background 0.28s ease, backdrop-filter 0.28s ease',
         display:    'flex',
-        alignItems: 'stretch',
-        justifyContent: 'flex-end',
+        alignItems: isMobile ? 'flex-end' : 'stretch',
+        justifyContent: isMobile ? 'stretch' : 'flex-end',
       }}
     >
-      {/* Drawer */}
+      {/* Drawer — slides from right on desktop, from bottom on mobile */}
       <div style={{
-        width:      'min(560px, 95vw)',
+        width:      isMobile ? '100%' : 'min(560px, 95vw)',
+        maxHeight:  isMobile ? '90vh' : 'none',
         background: '#0c0c0e',
-        borderLeft: `3px solid ${metal.cssColor}`,
+        borderLeft: isMobile ? 'none' : `3px solid ${metal.cssColor}`,
+        borderTop:  isMobile ? `3px solid ${metal.cssColor}` : 'none',
+        borderRadius: isMobile ? '12px 12px 0 0' : 0,
         display:    'flex',
         flexDirection: 'column',
-        transform:  visible ? 'translateX(0)' : 'translateX(100%)',
+        transform:  visible
+          ? 'translate(0,0)'
+          : isMobile ? 'translateY(100%)' : 'translateX(100%)',
         transition: 'transform 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
         overflowY:  'auto',
       }}>
@@ -680,7 +698,7 @@ function DetailPanel({ metal, points, change, onClose, tweaks }) {
 }
 
 // ─── HEADER ──────────────────────────────────────────────────────────────────
-function Header({ lastUpdated, onRefresh, refreshing }) {
+function Header({ lastUpdated, onRefresh, refreshing, isMobile }) {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric', year:'numeric' });
 
@@ -692,38 +710,46 @@ function Header({ lastUpdated, onRefresh, refreshing }) {
       background:   'rgba(8,8,9,0.88)',
       backdropFilter: 'blur(12px)',
       borderBottom: '1px solid var(--border)',
-      padding:      '0 32px',
-      height:       52,
+      padding:      isMobile ? '0 16px' : '0 32px',
+      height:       isMobile ? 48 : 52,
       display:      'flex',
       alignItems:   'center',
-      gap:          20,
+      gap:          isMobile ? 10 : 20,
     }}>
       {/* Brand */}
-      <div style={{ display:'flex', alignItems:'baseline', gap:10 }}>
+      <div style={{ display:'flex', alignItems:'baseline', gap: isMobile ? 6 : 10 }}>
         <span style={{
           fontFamily: 'var(--font-sans)',
-          fontSize:   13,
+          fontSize:   isMobile ? 12 : 13,
           fontWeight: 700,
           letterSpacing: '0.06em',
           textTransform: 'uppercase',
           color:      'var(--text)',
         }}>Commodities</span>
-        <span style={{ color:'var(--dim)', fontSize:12, fontFamily:'var(--font-mono)' }}>/</span>
-        <span style={{ color:'var(--muted)', fontSize:11, fontFamily:'var(--font-mono)' }}>Market Overview</span>
+        {!isMobile && <>
+          <span style={{ color:'var(--dim)', fontSize:12, fontFamily:'var(--font-mono)' }}>/</span>
+          <span style={{ color:'var(--muted)', fontSize:11, fontFamily:'var(--font-mono)' }}>Market Overview</span>
+        </>}
       </div>
 
-      {/* Separator */}
       <div style={{ flex:1 }} />
 
-      {/* Date */}
-      <span style={{ fontSize:11, fontFamily:'var(--font-mono)', color:'var(--muted)', letterSpacing:'0.04em' }}>
-        {dateStr}
-      </span>
+      {/* Date — hidden on mobile */}
+      {!isMobile && (
+        <span style={{ fontSize:11, fontFamily:'var(--font-mono)', color:'var(--muted)', letterSpacing:'0.04em' }}>
+          {dateStr}
+        </span>
+      )}
 
       {/* Last updated */}
-      {lastUpdated && (
+      {lastUpdated && !isMobile && (
         <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.04em' }}>
           Updated {lastUpdated}
+        </span>
+      )}
+      {lastUpdated && isMobile && (
+        <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.04em' }}>
+          {lastUpdated}
         </span>
       )}
 
@@ -739,7 +765,7 @@ function Header({ lastUpdated, onRefresh, refreshing }) {
           fontSize:     10,
           letterSpacing:'0.08em',
           textTransform:'uppercase',
-          padding:      '5px 12px',
+          padding:      isMobile ? '5px 10px' : '5px 12px',
           cursor:       refreshing ? 'not-allowed' : 'pointer',
           transition:   'color 0.15s, border-color 0.15s',
           display:      'flex',
@@ -749,18 +775,15 @@ function Header({ lastUpdated, onRefresh, refreshing }) {
         onMouseEnter={e => { if (!refreshing) { e.target.style.color = 'var(--text)'; e.target.style.borderColor = 'var(--border-strong)'; }}}
         onMouseLeave={e => { e.target.style.color = 'var(--muted)'; e.target.style.borderColor = 'var(--border)'; }}
       >
-        <span style={{
-          display:     'inline-block',
-          animation:   refreshing ? 'spin 0.8s linear infinite' : 'none',
-        }}>↻</span>
-        Refresh
+        <span style={{ display:'inline-block', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>↻</span>
+        {!isMobile && 'Refresh'}
       </button>
     </header>
   );
 }
 
 // ─── TICKER TAPE ─────────────────────────────────────────────────────────────
-function TickerTape({ metals, metalData, allPoints }) {
+function TickerTape({ metals, metalData, allPoints, isMobile }) {
   const items = metals.map(m => {
     const pts    = allPoints[m.key] || [];
     const latest = pts[pts.length - 1]?.v;
@@ -772,7 +795,7 @@ function TickerTape({ metals, metalData, allPoints }) {
     <div style={{
       borderBottom: '1px solid var(--border)',
       background:   'var(--bg)',
-      padding:      '0 32px',
+      padding:      isMobile ? '0 16px' : '0 32px',
       height:       36,
       display:      'flex',
       alignItems:   'center',
@@ -877,6 +900,8 @@ function App() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expandedKey, setExpandedKey] = useState(null);
+  const windowWidth = useWindowWidth();
+  const isMobile = windowWidth < 640;
 
   useEffect(() => {
     loadData()
@@ -944,21 +969,21 @@ function App() {
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
 
-      <Header lastUpdated={lastUpdated} onRefresh={handleRefresh} refreshing={refreshing} />
-      <TickerTape metals={METALS} allPoints={allPoints} />
+      <Header lastUpdated={lastUpdated} onRefresh={handleRefresh} refreshing={refreshing} isMobile={isMobile} />
+      <TickerTape metals={METALS} allPoints={allPoints} isMobile={isMobile} />
 
       {/* Main content */}
-      <main style={{ maxWidth:1440, margin:'0 auto', padding: isDense ? '20px 24px' : '28px 32px' }}>
+      <main style={{ maxWidth:1440, margin:'0 auto', padding: isMobile ? '16px' : isDense ? '20px 24px' : '28px 32px' }}>
 
         {/* Controls row */}
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: isDense ? 16 : 24 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: isMobile ? 12 : isDense ? 16 : 24, flexWrap: isMobile ? 'wrap' : 'nowrap', gap: 8 }}>
           <SectionLabel text="Spot Prices" sub={`— ${timeframe === 0 ? 'All time' : timeframe + 'd window'}`} />
           <TimeframeSelector value={timeframe} onChange={setTimeframe} />
         </div>
 
         {isEditorial ? (
           /* ─── EDITORIAL LAYOUT ─── */
-          <div style={{ display:'flex', flexDirection:'column', gap: isDense ? 12 : 16 }}>
+          <div style={{ display:'flex', flexDirection:'column', gap: isMobile ? 10 : isDense ? 12 : 16 }}>
 
             {/* Hero row */}
             <HeroCard
@@ -967,6 +992,7 @@ function App() {
               change={allChanges[heroMetal.key]}
               tweaks={tweaks}
               onExpand={() => setExpandedKey(heroMetal.key)}
+              isMobile={isMobile}
             />
 
             {/* Precious metals grid */}
@@ -977,8 +1003,10 @@ function App() {
                 </div>
                 <div style={{
                   display:'grid',
-                  gridTemplateColumns:`repeat(${Math.min(preciousRest.length, 4)}, 1fr)`,
-                  gap: isDense ? 8 : 12,
+                  gridTemplateColumns: isMobile
+                    ? 'repeat(2, 1fr)'
+                    : `repeat(${Math.min(preciousRest.length, 4)}, 1fr)`,
+                  gap: isMobile ? 8 : isDense ? 8 : 12,
                 }}>
                   {preciousRest.map(m => (
                     <CompactCard
@@ -987,7 +1015,7 @@ function App() {
                       points={allPoints[m.key]}
                       change={allChanges[m.key]}
                       tweaks={tweaks}
-                      dense={isDense}
+                      dense={isMobile || isDense}
                       onExpand={() => setExpandedKey(m.key)}
                     />
                   ))}
@@ -1003,8 +1031,10 @@ function App() {
                 </div>
                 <div style={{
                   display:'grid',
-                  gridTemplateColumns:`repeat(${Math.min(industrial.length, 4)}, 1fr)`,
-                  gap: isDense ? 8 : 12,
+                  gridTemplateColumns: isMobile
+                    ? 'repeat(2, 1fr)'
+                    : `repeat(${Math.min(industrial.length, 4)}, 1fr)`,
+                  gap: isMobile ? 8 : isDense ? 8 : 12,
                 }}>
                   {industrial.map(m => (
                     <CompactCard
@@ -1013,7 +1043,7 @@ function App() {
                       points={allPoints[m.key]}
                       change={allChanges[m.key]}
                       tweaks={tweaks}
-                      dense={isDense}
+                      dense={isMobile || isDense}
                       onExpand={() => setExpandedKey(m.key)}
                     />
                   ))}
@@ -1025,8 +1055,8 @@ function App() {
           /* ─── UNIFORM GRID LAYOUT ─── */
           <div style={{
             display:'grid',
-            gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))',
-            gap: isDense ? 8 : 12,
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: isMobile ? 8 : isDense ? 8 : 12,
           }}>
             {METALS.map(m => (
               <CompactCard
@@ -1035,7 +1065,7 @@ function App() {
                 points={allPoints[m.key]}
                 change={allChanges[m.key]}
                 tweaks={tweaks}
-                dense={isDense}
+                dense={isMobile || isDense}
                 onExpand={() => setExpandedKey(m.key)}
               />
             ))}
@@ -1068,6 +1098,7 @@ function App() {
           change={allChanges[expandedMetal.key]}
           onClose={() => setExpandedKey(null)}
           tweaks={tweaks}
+          isMobile={isMobile}
         />
       )}
 
