@@ -122,33 +122,12 @@ function computeChange(points) {
 function Sparkline({ points, color, style = 'area', height = 80 }) {
   const canvasRef = useRef(null);
   const animRef   = useRef(null);
-  const progressRef = useRef(0);
 
   useEffect(() => {
     if (!points || points.length < 2) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    const W = canvas.offsetWidth;
-    const H = height;
-    canvas.width  = W * dpr;
-    canvas.height = H * dpr;
-    canvas.style.width  = W + 'px';
-    canvas.style.height = H + 'px';
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-
-    const vals  = points.map(p => p.v);
-    const min   = Math.min(...vals);
-    const max   = Math.max(...vals);
-    const range = max - min || 1;
-    const pad   = 6;
-
-    const xOf = i => pad + (i / (points.length - 1)) * (W - pad * 2);
-    const yOf = v => H - pad - ((v - min) / range) * (H - pad * 2);
-
-    // color is a hex string like '#d4a43a' — parse to r,g,b for canvas rgba
     function hexToRgb(hex) {
       const h = hex.replace('#','');
       const n = parseInt(h.length === 3
@@ -160,60 +139,110 @@ function Sparkline({ points, color, style = 'area', height = 80 }) {
     const fillColor  = `rgba(${r},${g},${b},0.18)`;
     const barColor   = `rgba(${r},${g},${b},0.28)`;
 
-    function draw(t) {
-      ctx.clearRect(0, 0, W, H);
-      const n = Math.max(2, Math.floor(points.length * t));
+    function fmtDate(ts) {
+      return new Date(ts).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    }
 
-      // Area fill
-      if (style === 'area') {
-        const grad = ctx.createLinearGradient(0, 0, 0, H);
-        grad.addColorStop(0, fillColor);
-        grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+    function paint() {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+
+      // Read width from parent so we always get the laid-out size, not the
+      // canvas's own (potentially stale) inline-style width.
+      const W = (canvas.parentElement?.offsetWidth || canvas.offsetWidth || 200);
+      const H = height;
+      const dpr = window.devicePixelRatio || 1;
+
+      canvas.width        = W * dpr;
+      canvas.height       = H * dpr;
+      canvas.style.height = H + 'px';
+      // width: 100% via CSS — don't set inline so ResizeObserver can remeasure freely
+
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const LABEL_H = height >= 64 ? 16 : 0;
+      const chartH  = H - LABEL_H;
+      const pad     = 6;
+
+      const vals  = points.map(p => p.v);
+      const min   = Math.min(...vals);
+      const max   = Math.max(...vals);
+      const range = max - min || 1;
+
+      const xOf = i => pad + (i / (points.length - 1)) * (W - pad * 2);
+      const yOf = v => chartH - pad - ((v - min) / range) * (chartH - pad * 2);
+
+      function drawLabels() {
+        if (LABEL_H === 0 || W < 80) return;
+        ctx.font = `9px 'DM Mono', monospace`;
+        ctx.fillStyle = 'rgba(90,90,104,0.85)';
+        ctx.textBaseline = 'bottom';
+        const last = points.length - 1;
+        const entries = W >= 160
+          ? [{ idx: 0, align: 'left' }, { idx: Math.floor(last / 2), align: 'center' }, { idx: last, align: 'right' }]
+          : [{ idx: 0, align: 'left' }, { idx: last, align: 'right' }];
+        entries.forEach(({ idx, align }) => {
+          ctx.textAlign = align;
+          ctx.fillText(fmtDate(points[idx].t), xOf(idx), H - 1);
+        });
+      }
+
+      function draw(t) {
+        ctx.clearRect(0, 0, W, H);
+        const n = Math.max(2, Math.floor(points.length * t));
+
+        if (style === 'area') {
+          const grad = ctx.createLinearGradient(0, 0, 0, chartH);
+          grad.addColorStop(0, fillColor);
+          grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+          ctx.beginPath();
+          ctx.moveTo(xOf(0), yOf(points[0].v));
+          for (let i = 1; i < n; i++) ctx.lineTo(xOf(i), yOf(points[i].v));
+          ctx.lineTo(xOf(n - 1), chartH);
+          ctx.lineTo(xOf(0), chartH);
+          ctx.closePath();
+          ctx.fillStyle = grad;
+          ctx.fill();
+        }
+
         ctx.beginPath();
         ctx.moveTo(xOf(0), yOf(points[0].v));
         for (let i = 1; i < n; i++) ctx.lineTo(xOf(i), yOf(points[i].v));
-        ctx.lineTo(xOf(n - 1), H);
-        ctx.lineTo(xOf(0), H);
-        ctx.closePath();
-        ctx.fillStyle = grad;
-        ctx.fill();
-      }
+        ctx.strokeStyle = solidColor;
+        ctx.lineWidth = style === 'bar' ? 1 : 1.5;
+        ctx.lineJoin = 'round';
+        ctx.lineCap  = 'round';
+        ctx.stroke();
 
-      // Line
-      ctx.beginPath();
-      ctx.moveTo(xOf(0), yOf(points[0].v));
-      for (let i = 1; i < n; i++) ctx.lineTo(xOf(i), yOf(points[i].v));
-      ctx.strokeStyle = solidColor;
-      ctx.lineWidth = style === 'bar' ? 1 : 1.5;
-      ctx.lineJoin = 'round';
-      ctx.lineCap  = 'round';
-      ctx.stroke();
-
-      // Bar style overlay
-      if (style === 'bar') {
-        for (let i = 0; i < n; i++) {
-          const bw = Math.max(1, (W - pad * 2) / points.length - 1);
-          ctx.fillStyle = barColor;
-          ctx.fillRect(xOf(i) - bw/2, yOf(points[i].v), bw, H - yOf(points[i].v));
+        if (style === 'bar') {
+          for (let i = 0; i < n; i++) {
+            const bw = Math.max(1, (W - pad * 2) / points.length - 1);
+            ctx.fillStyle = barColor;
+            ctx.fillRect(xOf(i) - bw/2, yOf(points[i].v), bw, chartH - yOf(points[i].v));
+          }
         }
+
+        drawLabels();
       }
+
+      const start = performance.now();
+      const dur   = 800;
+      function frame(now) {
+        const p = Math.min(1, (now - start) / dur);
+        draw(1 - Math.pow(1 - p, 3));
+        if (p < 1) animRef.current = requestAnimationFrame(frame);
+      }
+      animRef.current = requestAnimationFrame(frame);
     }
 
-    // Animate in
-    const start = performance.now();
-    const dur   = 800;
-    function frame(now) {
-      const p = Math.min(1, (now - start) / dur);
-      const eased = 1 - Math.pow(1 - p, 3);
-      draw(eased);
-      if (p < 1) animRef.current = requestAnimationFrame(frame);
-    }
-    animRef.current = requestAnimationFrame(frame);
+    paint();
 
-    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+    const ro = new ResizeObserver(paint);
+    ro.observe(canvas.parentElement || canvas);
+    return () => { ro.disconnect(); if (animRef.current) cancelAnimationFrame(animRef.current); };
   }, [points, color, style, height]);
 
-  return <canvas ref={canvasRef} className="spark" style={{ height }} />;
+  return <canvas ref={canvasRef} className="spark" style={{ height, display: 'block', width: '100%' }} />;
 }
 
 // ─── CHANGE BADGE ─────────────────────────────────────────────────────────────
