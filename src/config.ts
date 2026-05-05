@@ -25,6 +25,7 @@ export const config = {
 	metalpriceMonthlyQuota: Number(process.env.METALPRICE_MONTHLY_QUOTA || "1000"),
 	manualRefreshMinutes: process.env.METALPRICE_REFRESH_MINUTES ? Number(process.env.METALPRICE_REFRESH_MINUTES) : undefined,
 	seedDepthDays: Number(process.env.SEED_DEPTH_DAYS || "1825"), // default 5 years
+	newsApiKey: process.env.NEWS_API_KEY || "",
 };
 
 export function assertConfig() {

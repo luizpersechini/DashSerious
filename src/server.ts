@@ -5,6 +5,7 @@ import { MetalpriceClient } from "./metalpriceClient.js";
 import { fetchChange } from "./metalpriceClient.js";
 import { config } from "./config.js";
 import { hydrateTimeseries, persistTimeseries as persistTS, registerGracefulPersist } from "./storage.js";
+import { fetchNews, type NewsItem } from "./newsClient.js";
 
 type MetalCache = {
 	usdPerOunce: number;
@@ -56,6 +57,11 @@ const lastFetchBySymbol = new Map<string, number>();
 type SeriesPoint = { t: number; v: number };
 const timeseriesBySymbol = new Map<string, SeriesPoint[]>();
 const MAX_SERIES_POINTS = 4000; // ~10 years of daily data
+
+type NewsCache = { items: NewsItem[]; fetchedAt: number };
+const NEWS_CACHE_TTL_MS = 30 * 60 * 1000;
+let newsCache: NewsCache | null = null;
+let newsInFlight: Promise<NewsItem[]> | null = null;
 
 // Single in-flight refresh guard: collapses concurrent /latest cache-miss paths into one upstream call.
 let inFlightRefresh: Promise<void> | null = null;
@@ -318,6 +324,28 @@ app.post("/api/refresh", async (_req, res) => {
 			error: String(err?.message || err) 
 		});
 	}
+});
+
+app.get("/api/news", async (_req, res) => {
+  if (!config.newsApiKey)
+    return res.json({ items: [], configured: false });
+
+  try {
+    const now = Date.now();
+    if (newsCache && now - newsCache.fetchedAt < NEWS_CACHE_TTL_MS)
+      return res.json({ items: newsCache.items, configured: true });
+
+    if (!newsInFlight) {
+      newsInFlight = fetchNews(config.newsApiKey).finally(() => { newsInFlight = null; });
+    }
+    const items = await newsInFlight;
+    newsCache = { items, fetchedAt: Date.now() };
+    res.setHeader("Cache-Control", "public, max-age=60");
+    return res.json({ items, configured: true });
+  } catch (err: any) {
+    if (newsCache) return res.json({ items: newsCache.items, configured: true, stale: true });
+    return res.status(502).json({ items: [], configured: true, error: String(err?.message ?? err) });
+  }
 });
 
 // Initial refresh is already kicked off by the `ready` promise above via coalesceRefresh().

@@ -104,6 +104,175 @@ async function loadData() {
   return json; // { success: true, symbols: { XAU: [{t,v},...], ... } }
 }
 
+function timeAgo(ms) {
+  if (!ms) return '';
+  const m = Math.floor((Date.now() - ms) / 60000);
+  if (m < 1)  return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function chipStyle(active) {
+  return {
+    background:    active ? 'var(--dim)' : 'none',
+    border:        '1px solid ' + (active ? 'var(--border-strong)' : 'var(--border)'),
+    color:         active ? 'var(--text)' : 'var(--muted)',
+    fontFamily:    'var(--font-mono)',
+    fontSize:      9,
+    letterSpacing: '0.1em',
+    padding:       '3px 8px',
+    cursor:        'pointer',
+    textTransform: 'uppercase',
+    transition:    'all 0.12s',
+  };
+}
+
+function FilterChips({ tags, active, onChange }) {
+  const metalMap = Object.fromEntries(METALS.map(m => [m.key, m]));
+  return (
+    <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
+      <button onClick={() => onChange(null)} style={chipStyle(active === null)}>ALL</button>
+      {tags.map(tag => {
+        const m = metalMap[tag];
+        if (!m) return null;
+        const isActive = active === tag;
+        return (
+          <button key={tag} onClick={() => onChange(isActive ? null : tag)} style={{
+            ...chipStyle(isActive),
+            color:        isActive ? m.cssColor : undefined,
+            borderColor:  isActive ? m.cssColor : undefined,
+          }}>{tag}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+function NewsCard({ item }) {
+  const [hovered, setHovered] = React.useState(false);
+  const metalMap = Object.fromEntries(METALS.map(m => [m.key, m]));
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background:    'var(--surface)',
+        border:        `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
+        borderLeft:    '3px solid var(--dim)',
+        padding:       '14px 18px',
+        display:       'flex',
+        flexDirection: 'column',
+        gap:           8,
+        transition:    'border-color 0.15s ease',
+      }}
+    >
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <span style={{ fontFamily:'var(--font-mono)', fontSize:9, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--muted)', fontWeight:500 }}>
+          {item.source}
+        </span>
+        <span style={{ fontFamily:'var(--font-mono)', fontSize:9, color:'var(--dim)', letterSpacing:'0.04em' }}>
+          {timeAgo(item.pubMs)}
+        </span>
+      </div>
+      <a href={item.link} target="_blank" rel="noopener noreferrer" style={{
+        fontFamily:    'var(--font-sans)',
+        fontSize:      13,
+        fontWeight:    500,
+        color:         hovered ? 'var(--text)' : 'oklch(0.78 0.015 240)',
+        textDecoration:'none',
+        lineHeight:    1.35,
+        transition:    'color 0.12s',
+      }}>{item.title}</a>
+      {item.description && (
+        <p style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--muted)', lineHeight:1.5, margin:0, letterSpacing:'-0.01em' }}>
+          {item.description}
+        </p>
+      )}
+      {item.tags.length > 0 && (
+        <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:2 }}>
+          {item.tags.map(tag => {
+            const m = metalMap[tag];
+            if (!m) return null;
+            return (
+              <span key={tag} style={{
+                fontFamily:    'var(--font-mono)',
+                fontSize:      9,
+                letterSpacing: '0.1em',
+                color:         m.cssColor,
+                border:        `1px solid ${m.cssColor}`,
+                padding:       '2px 7px',
+                opacity:       0.75,
+                textTransform: 'uppercase',
+              }}>{tag}</span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NewsFeed({ newsData, isMobile }) {
+  const [activeTag, setActiveTag] = React.useState(null);
+  const items = newsData?.items ?? [];
+  const isConfigured = newsData === null || newsData.configured !== false;
+
+  const presentTags = React.useMemo(() => {
+    const s = new Set();
+    items.forEach(it => it.tags.forEach(t => s.add(t)));
+    return METALS.map(m => m.key).filter(k => s.has(k));
+  }, [items]);
+
+  const filtered = activeTag ? items.filter(it => it.tags.includes(activeTag)) : items;
+
+  return (
+    <div style={{ marginTop: isMobile ? 28 : 40 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: isMobile ? 10 : 14, flexWrap:'wrap', gap:8 }}>
+        <div style={{ display:'flex', alignItems:'baseline', gap:10 }}>
+          <span style={{ fontSize:10, fontFamily:'var(--font-mono)', letterSpacing:'0.12em', color:'var(--muted)', textTransform:'uppercase' }}>
+            Market News
+          </span>
+          <span style={{ fontSize:9, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.06em' }}>
+            — 30 min cache
+          </span>
+        </div>
+        {presentTags.length > 0 && (
+          <FilterChips tags={presentTags} active={activeTag} onChange={setActiveTag} />
+        )}
+      </div>
+
+      {!isConfigured && (
+        <div style={{ background:'var(--surface)', border:'1px solid var(--border)', borderLeft:'3px solid var(--dim)', padding:'14px 18px', fontFamily:'var(--font-mono)', fontSize:11, color:'var(--muted)', letterSpacing:'0.04em' }}>
+          Set <span style={{ color:'var(--text)' }}>NEWS_API_KEY</span> in .env to enable market news.
+          Free key at <span style={{ color:'var(--text)' }}>newsdata.io</span>.
+        </div>
+      )}
+
+      {newsData === null && (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {[1,2,3].map(i => (
+            <div key={i} style={{ background:'var(--surface)', border:'1px solid var(--border)', padding:'16px 18px', height:80, opacity:0.5 }} />
+          ))}
+        </div>
+      )}
+
+      {newsData !== null && isConfigured && (
+        filtered.length === 0 ? (
+          <div style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--dim)', padding:'16px 0', letterSpacing:'0.06em' }}>
+            {activeTag ? `No articles tagged ${activeTag}` : 'No articles available.'}
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap: isMobile ? 6 : 8 }}>
+            {filtered.map(item => <NewsCard key={item.id} item={item} />)}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
 function getPoints(data, symbol, days = 365) {
   const all = (data?.symbols?.[symbol] || []).slice().sort((a,b) => a.t - b.t);
   if (days === 0) return all;
@@ -905,6 +1074,7 @@ function App() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expandedKey, setExpandedKey] = useState(null);
+  const [newsData, setNewsData] = useState(null);
   const windowWidth = useWindowWidth();
   const isMobile = windowWidth < 640;
 
@@ -920,6 +1090,11 @@ function App() {
         }
       })
       .catch(() => setLoading(false));
+
+    fetch('/api/news')
+      .then(r => r.json())
+      .then(d => setNewsData(d))
+      .catch(() => setNewsData({ items: [], configured: true }));
   }, []);
 
   const allPoints = useMemo(() => {
@@ -1083,6 +1258,9 @@ function App() {
             ))}
           </div>
         )}
+
+        {/* News feed */}
+        <NewsFeed newsData={newsData} isMobile={isMobile} />
 
         {/* Footer */}
         <div style={{
