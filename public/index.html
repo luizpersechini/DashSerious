@@ -143,11 +143,18 @@ function Sparkline({ points, color, style = 'area', height = 80 }) {
       return new Date(ts).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
     }
 
+    function fmtY(v) {
+      if (v >= 1e6)  return (v / 1e6).toFixed(2) + 'M';
+      if (v >= 1e4)  return Math.round(v / 1e3) + 'K';
+      if (v >= 1e3)  return (v / 1e3).toFixed(1) + 'K';
+      if (v >= 100)  return v.toFixed(0);
+      if (v >= 10)   return v.toFixed(2);
+      return v.toFixed(3);
+    }
+
     function paint() {
       if (animRef.current) cancelAnimationFrame(animRef.current);
 
-      // Read width from parent so we always get the laid-out size, not the
-      // canvas's own (potentially stale) inline-style width.
       const W = (canvas.parentElement?.offsetWidth || canvas.offsetWidth || 200);
       const H = height;
       const dpr = window.devicePixelRatio || 1;
@@ -155,35 +162,76 @@ function Sparkline({ points, color, style = 'area', height = 80 }) {
       canvas.width        = W * dpr;
       canvas.height       = H * dpr;
       canvas.style.height = H + 'px';
-      // width: 100% via CSS — don't set inline so ResizeObserver can remeasure freely
 
       const ctx = canvas.getContext('2d');
       ctx.scale(dpr, dpr);
 
-      const LABEL_H = height >= 64 ? 16 : 0;
+      const LABEL_H = height >= 64 ? 12 : 0;  // tighter x-axis strip
       const chartH  = H - LABEL_H;
-      const pad     = 6;
+      const padX = 4;  // horizontal padding
+      const padY = 4;  // vertical padding inside chart area
 
       const vals  = points.map(p => p.v);
       const min   = Math.min(...vals);
       const max   = Math.max(...vals);
       const range = max - min || 1;
 
-      const xOf = i => pad + (i / (points.length - 1)) * (W - pad * 2);
-      const yOf = v => chartH - pad - ((v - min) / range) * (chartH - pad * 2);
+      const xOf = i => padX + (i / (points.length - 1)) * (W - padX * 2);
+      const yOf = v => chartH - padY - ((v - min) / range) * (chartH - padY * 2);
 
-      function drawLabels() {
-        if (LABEL_H === 0 || W < 80) return;
-        ctx.font = `9px 'DM Mono', monospace`;
-        ctx.fillStyle = 'rgba(90,90,104,0.85)';
-        ctx.textBaseline = 'bottom';
-        const last = points.length - 1;
-        const entries = W >= 160
-          ? [{ idx: 0, align: 'left' }, { idx: Math.floor(last / 2), align: 'center' }, { idx: last, align: 'right' }]
-          : [{ idx: 0, align: 'left' }, { idx: last, align: 'right' }];
-        entries.forEach(({ idx, align }) => {
-          ctx.textAlign = align;
-          ctx.fillText(fmtDate(points[idx].t), xOf(idx), H - 1);
+      // Y-axis: compute 2–3 nice round ticks
+      function niceStep(r) {
+        const rough = r / 3;
+        const exp   = Math.floor(Math.log10(rough || 1));
+        const base  = Math.pow(10, exp);
+        for (const s of [1, 2, 2.5, 5, 10]) {
+          if (base * s >= rough) return base * s;
+        }
+        return base * 10;
+      }
+      const step  = niceStep(range);
+      const ticks = [];
+      for (let v = Math.ceil(min / step) * step; v <= max + step * 0.01; v += step) {
+        if (v >= min - step * 0.01 && v <= max + step * 0.01) ticks.push(v);
+      }
+      // Always include min and max for context
+      if (!ticks.length || Math.abs(ticks[0] - min) > step * 0.1) ticks.unshift(min);
+      if (Math.abs(ticks[ticks.length - 1] - max) > step * 0.1) ticks.push(max);
+
+      function drawAxes() {
+        // ── X-axis date labels ──
+        if (LABEL_H > 0 && W >= 80) {
+          ctx.font = `9px 'DM Mono', monospace`;
+          ctx.fillStyle = 'rgba(90,90,104,0.8)';
+          ctx.textBaseline = 'bottom';
+          const last = points.length - 1;
+          const entries = W >= 160
+            ? [{ idx: 0, align: 'left' }, { idx: Math.floor(last / 2), align: 'center' }, { idx: last, align: 'right' }]
+            : [{ idx: 0, align: 'left' }, { idx: last, align: 'right' }];
+          entries.forEach(({ idx, align }) => {
+            ctx.textAlign = align;
+            ctx.fillText(fmtDate(points[idx].t), xOf(idx), H - 1);
+          });
+        }
+
+        // ── Y-axis labels + gridlines ──
+        if (height < 64) return;
+        ctx.font = `8px 'DM Mono', monospace`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ticks.forEach(v => {
+          const y = yOf(v);
+          if (y < 2 || y > chartH - 2) return;  // skip out-of-bounds
+          // gridline
+          ctx.beginPath();
+          ctx.moveTo(padX, y);
+          ctx.lineTo(W - padX, y);
+          ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          // label
+          ctx.fillStyle = 'rgba(90,90,104,0.7)';
+          ctx.fillText(fmtY(v), padX + 2, y);
         });
       }
 
@@ -216,13 +264,13 @@ function Sparkline({ points, color, style = 'area', height = 80 }) {
 
         if (style === 'bar') {
           for (let i = 0; i < n; i++) {
-            const bw = Math.max(1, (W - pad * 2) / points.length - 1);
+            const bw = Math.max(1, (W - padX * 2) / points.length - 1);
             ctx.fillStyle = barColor;
             ctx.fillRect(xOf(i) - bw/2, yOf(points[i].v), bw, chartH - yOf(points[i].v));
           }
         }
 
-        drawLabels();
+        drawAxes();
       }
 
       const start = performance.now();
@@ -926,6 +974,13 @@ function App() {
     return out;
   }, [rawData, timeframe]);
 
+  const allRawPoints = useMemo(() => {
+    if (!rawData) return {};
+    const out = {};
+    METALS.forEach(m => { out[m.key] = getPoints(rawData, m.key, 0); });
+    return out;
+  }, [rawData]);
+
   const allChanges = useMemo(() => {
     const out = {};
     METALS.forEach(m => { out[m.key] = computeChange(allPoints[m.key]); });
@@ -1094,7 +1149,7 @@ function App() {
       {expandedMetal && (
         <DetailPanel
           metal={expandedMetal}
-          points={allPoints[expandedMetal.key]}
+          points={allRawPoints[expandedMetal.key]}
           change={allChanges[expandedMetal.key]}
           onClose={() => setExpandedKey(null)}
           tweaks={tweaks}
