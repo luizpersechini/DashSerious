@@ -38,8 +38,7 @@ const METAL_KEYWORDS: Array<{ tag: string; terms: string[] }> = [
   { tag: "BRL", terms: ["brl", "real", "brazilian real"] },
 ];
 
-const QUERY =
-  '"gold" OR "silver" OR "platinum" OR "palladium" OR "nickel" OR "copper" OR "cobalt" OR "BRL"';
+const QUERY = "gold price OR silver price OR precious metals OR copper nickel cobalt";
 
 function tagArticle(title: string, description: string): string[] {
   const text = (title + " " + description).toLowerCase();
@@ -54,7 +53,6 @@ export async function fetchNews(apiKey: string): Promise<NewsItem[]> {
   const url = new URL(BASE_URL);
   url.searchParams.set("q", QUERY);
   url.searchParams.set("language", "en");
-  url.searchParams.set("category", "business");
   url.searchParams.set("apikey", apiKey);
 
   const res = await fetch(url.toString());
@@ -75,5 +73,14 @@ export async function fetchNews(apiKey: string): Promise<NewsItem[]> {
     tags: tagArticle(r.title, r.description ?? ""),
   }));
 
-  return items.sort((a, b) => b.pubMs - a.pubMs);
+  // Deduplicate by title (same story from multiple syndicated sources)
+  const seen = new Set<string>();
+  const unique = items.filter(item => {
+    const key = item.title.trim().toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return unique.sort((a, b) => b.pubMs - a.pubMs);
 }
