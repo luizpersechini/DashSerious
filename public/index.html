@@ -116,9 +116,9 @@ function timeAgo(ms) {
 
 function chipStyle(active) {
   return {
-    background:    active ? 'var(--dim)' : 'none',
-    border:        '1px solid ' + (active ? 'var(--border-strong)' : 'var(--border)'),
-    color:         active ? 'var(--text)' : 'var(--muted)',
+    background:    active ? 'var(--dim)' : 'rgba(255,255,255,0.04)',
+    border:        '1px solid ' + (active ? 'var(--border-strong)' : 'rgba(255,255,255,0.14)'),
+    color:         active ? 'var(--text)' : 'rgba(232,232,236,0.55)',
     fontFamily:    'var(--font-mono)',
     fontSize:      9,
     letterSpacing: '0.1em',
