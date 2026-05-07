@@ -38,7 +38,13 @@ const METAL_KEYWORDS: Array<{ tag: string; terms: string[] }> = [
   { tag: "BRL", terms: ["brl", "real", "brazilian real"] },
 ];
 
-const QUERY = "gold price OR silver price OR precious metals OR copper nickel cobalt";
+// Two focused queries fetched in parallel (2 credits per 30-min cache cycle)
+const QUERIES = [
+  // Precious metals, BRL, macro/geopolitics angle
+  "precious metals OR base metals OR Brazilian real OR commodities geopolitics",
+  // Industrial metals focus
+  "cobalt supply OR nickel market OR copper price OR palladium platinum",
+];
 
 function tagArticle(title: string, description: string): string[] {
   const text = (title + " " + description).toLowerCase();
@@ -49,20 +55,22 @@ function tagArticle(title: string, description: string): string[] {
   return tags;
 }
 
-export async function fetchNews(apiKey: string): Promise<NewsItem[]> {
+async function fetchQuery(query: string, apiKey: string): Promise<NewsDataResult[]> {
   const url = new URL(BASE_URL);
-  url.searchParams.set("q", QUERY);
+  url.searchParams.set("q", query);
   url.searchParams.set("language", "en");
   url.searchParams.set("apikey", apiKey);
-
   const res = await fetch(url.toString());
   const data = (await res.json()) as NewsDataResponse;
+  if (data.status !== "success") return []; // soft-fail per query
+  return data.results ?? [];
+}
 
-  if (data.status !== "success" || !data.results) {
-    throw new Error(data.message ?? "NewsData.io error");
-  }
+export async function fetchNews(apiKey: string): Promise<NewsItem[]> {
+  const results = await Promise.all(QUERIES.map(q => fetchQuery(q, apiKey)));
+  const all = results.flat();
 
-  const items: NewsItem[] = data.results.map(r => ({
+  const items: NewsItem[] = all.map(r => ({
     id: Buffer.from(r.link).toString("base64").slice(0, 16),
     title: r.title,
     description: (r.description ?? "").slice(0, 200),
@@ -73,14 +81,29 @@ export async function fetchNews(apiKey: string): Promise<NewsItem[]> {
     tags: tagArticle(r.title, r.description ?? ""),
   }));
 
-  // Deduplicate by title (same story from multiple syndicated sources)
+  const RELEVANCE_TERMS = [
+    "gold","silver","platinum","palladium","nickel","copper","cobalt",
+    "metal","mineral","mining","commodity","commodities",
+    "brl","brazil","real exchange",
+    "geopolit","sanction","tariff","trade war","supply chain",
+    "market","price","invest","economy","inflation","fed ","interest rate",
+    "iran","russia","china trade","opec",
+  ];
+
+  function isRelevant(item: NewsItem): boolean {
+    if (item.tags.length > 0) return true;
+    const text = (item.title + " " + item.description).toLowerCase();
+    return RELEVANCE_TERMS.some(t => text.includes(t));
+  }
+
+  // Deduplicate by normalised title, then filter relevance
   const seen = new Set<string>();
   const unique = items.filter(item => {
     const key = item.title.trim().toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  });
+  }).filter(isRelevant);
 
-  return unique.sort((a, b) => b.pubMs - a.pubMs);
+  return unique.sort((a, b) => b.pubMs - a.pubMs).slice(0, 20);
 }
