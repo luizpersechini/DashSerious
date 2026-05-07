@@ -1,6 +1,9 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
+import { createRequire } from "node:module";
+const _require = createRequire(import.meta.url);
+const { version: APP_VERSION } = _require("../package.json") as { version: string };
 import { MetalpriceClient } from "./metalpriceClient.js";
 import { fetchChange } from "./metalpriceClient.js";
 import { config } from "./config.js";
@@ -296,6 +299,11 @@ app.get("/api/allmetals/timeseries", (req, res) => {
 });
 
 // Health: unblocked (not under /api), usable as a Cloud Run readiness probe.
+app.get("/api/version", (_req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  return res.json({ version: APP_VERSION });
+});
+
 app.get("/health", (_req, res) => {
 	res.setHeader("Cache-Control", "no-store");
 	return res.json({

@@ -1075,6 +1075,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [expandedKey, setExpandedKey] = useState(null);
   const [newsData, setNewsData] = useState(null);
+  const [appVersion, setAppVersion] = useState(null);
   const windowWidth = useWindowWidth();
   const isMobile = windowWidth < 640;
 
@@ -1095,6 +1096,11 @@ function App() {
       .then(r => r.json())
       .then(d => setNewsData(d))
       .catch(() => setNewsData({ items: [], configured: true }));
+
+    fetch('/api/version')
+      .then(r => r.json())
+      .then(d => setAppVersion(d.version))
+      .catch(() => {});
   }, []);
 
   const allPoints = useMemo(() => {
@@ -1274,6 +1280,11 @@ function App() {
           <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.06em' }}>
             DATA — METALPRICE.IO · LIVE
           </span>
+          {appVersion && (
+            <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.06em', opacity:0.5 }}>
+              v{appVersion}
+            </span>
+          )}
           <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.06em' }}>
             PRICES IN USD · NOT FINANCIAL ADVICE
           </span>
