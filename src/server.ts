@@ -63,8 +63,20 @@ const MAX_SERIES_POINTS = 4000; // ~10 years of daily data
 
 type NewsCache = { items: NewsItem[]; fetchedAt: number };
 const NEWS_CACHE_TTL_MS = 30 * 60 * 1000;
+const NEWS_MAX_AGE_MS   = 48 * 60 * 60 * 1000; // keep articles for 48 h
+const NEWS_MAX_ITEMS    = 60;
 let newsCache: NewsCache | null = null;
 let newsInFlight: Promise<NewsItem[]> | null = null;
+
+/** Merge fresh batch into the existing accumulated list (dedup by id, prune >48 h old). */
+function mergeNews(existing: NewsItem[], fresh: NewsItem[], now: number): NewsItem[] {
+  const seen = new Set(existing.map(i => i.id));
+  const added = fresh.filter(i => !seen.has(i.id));
+  return [...added, ...existing]
+    .filter(i => i.pubMs > 0 && now - i.pubMs < NEWS_MAX_AGE_MS)
+    .sort((a, b) => b.pubMs - a.pubMs)
+    .slice(0, NEWS_MAX_ITEMS);
+}
 
 // Single in-flight refresh guard: collapses concurrent /latest cache-miss paths into one upstream call.
 let inFlightRefresh: Promise<void> | null = null;
@@ -346,10 +358,12 @@ app.get("/api/news", async (_req, res) => {
     if (!newsInFlight) {
       newsInFlight = fetchNews(config.newsApiKey).finally(() => { newsInFlight = null; });
     }
-    const items = await newsInFlight;
-    newsCache = { items, fetchedAt: Date.now() };
+    const fresh = await newsInFlight;
+    const now2  = Date.now();
+    const merged = mergeNews(newsCache?.items ?? [], fresh, now2);
+    newsCache = { items: merged, fetchedAt: now2 };
     res.setHeader("Cache-Control", "public, max-age=60");
-    return res.json({ items, configured: true });
+    return res.json({ items: merged, configured: true });
   } catch (err: any) {
     if (newsCache) return res.json({ items: newsCache.items, configured: true, stale: true });
     return res.status(502).json({ items: [], configured: true, error: String(err?.message ?? err) });
