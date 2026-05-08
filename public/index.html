@@ -292,9 +292,14 @@ function Sparkline({ points, color, style = 'area', height = 80 }) {
   const animRef   = useRef(null);
 
   useEffect(() => {
-    if (!points || points.length < 2) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (!points || points.length < 2) {
+      // Clear any chart painted by a previous timeframe selection
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
 
     function hexToRgb(hex) {
       const h = hex.replace('#','');
@@ -404,11 +409,19 @@ function Sparkline({ points, color, style = 'area', height = 80 }) {
       animRef.current = requestAnimationFrame(frame);
     }
 
-    paint();
+    // Double-rAF: ensures flex/grid layout has committed before we measure parentOffsetWidth
+    let rafId1 = requestAnimationFrame(() => {
+      let rafId2 = requestAnimationFrame(paint);
+      animRef.current = rafId2;
+    });
 
     const ro = new ResizeObserver(paint);
     ro.observe(canvas.parentElement || canvas);
-    return () => { ro.disconnect(); if (animRef.current) cancelAnimationFrame(animRef.current); };
+    return () => {
+      cancelAnimationFrame(rafId1);
+      ro.disconnect();
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+    };
   }, [points, color, style, height]);
 
   return <canvas ref={canvasRef} className="spark" style={{ height, display: 'block', width: '100%' }} />;
