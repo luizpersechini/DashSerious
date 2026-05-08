@@ -224,7 +224,7 @@ function NewsFeed({ newsData, isMobile }) {
     return METALS.map(m => m.key).filter(k => s.has(k));
   }, [items]);
 
-  const filtered = activeTag ? items.filter(it => it.tags.includes(activeTag)) : items;
+  const filtered = activeTag ? items.filter(it => Array.isArray(it.tags) && it.tags.includes(activeTag)) : items;
 
   return (
     <div style={{ marginTop: isMobile ? 28 : 40 }}>
@@ -426,8 +426,10 @@ function useWindowWidth() {
 }
 
 // ─── CHANGE BADGE ─────────────────────────────────────────────────────────────
-function ChangeBadge({ change, large }) {
-  if (!change) return <span className="skel" style={{ width: 60, height: 18 }} />;
+function ChangeBadge({ change, large, noData }) {
+  if (!change) return noData
+    ? <span style={{ color:'var(--dim)', fontFamily:'var(--font-mono)', fontSize: large ? 14 : 11 }}>—</span>
+    : <span className="skel" style={{ width: 60, height: 18 }} />;
   const sign  = change.direction === 'up' ? '+' : '';
   const arrow = change.direction === 'up' ? '↑' : change.direction === 'down' ? '↓' : '→';
   const clr   = change.direction === 'up'   ? 'oklch(0.72 0.15 155)'
@@ -452,7 +454,7 @@ function ChangeBadge({ change, large }) {
 }
 
 // ─── HERO CARD ───────────────────────────────────────────────────────────────
-function HeroCard({ metal, points, change, tweaks, onExpand, isMobile }) {
+function HeroCard({ metal, points, change, tweaks, onExpand, isMobile, timeframe }) {
   const [hovered, setHovered] = useState(false);
   const latest = points?.[points.length - 1]?.v;
   const chartH = isMobile ? 110 : 140;
@@ -511,8 +513,10 @@ function HeroCard({ metal, points, change, tweaks, onExpand, isMobile }) {
 
         {tweaks.showChange && (
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <ChangeBadge change={change} large />
-            <span style={{ color:'var(--muted)', fontSize:11, fontFamily:'var(--font-mono)' }}>1yr</span>
+            <ChangeBadge change={change} large noData={!!points?.length} />
+            <span style={{ color:'var(--muted)', fontSize:11, fontFamily:'var(--font-mono)' }}>
+              {(TF_OPTIONS.find(o => o.days === timeframe) || TF_OPTIONS[4]).label.toLowerCase()}
+            </span>
           </div>
         )}
 
@@ -548,7 +552,7 @@ function HeroCard({ metal, points, change, tweaks, onExpand, isMobile }) {
         fontFamily:'var(--font-mono)',
         color:     'var(--dim)',
         letterSpacing: '0.08em',
-      }}>1YR</div>
+      }}>{(TF_OPTIONS.find(o => o.days === timeframe) || TF_OPTIONS[4]).label}</div>
     </div>
   );
 }
@@ -587,7 +591,7 @@ function CompactCard({ metal, points, change, tweaks, dense, onExpand }) {
           fontWeight: 500,
           textTransform: 'uppercase',
         }}>{metal.symbol}</span>
-        {tweaks.showChange && <ChangeBadge change={change} />}
+        {tweaks.showChange && <ChangeBadge change={change} noData={!!points?.length} />}
       </div>
 
       {/* Price */}
@@ -771,7 +775,7 @@ function DetailPanel({ metal, points, change, onClose, tweaks, isMobile }) {
         {/* Chart area */}
         <div style={{ padding:'20px 24px 0' }}>
           {/* TF + style controls */}
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, overflowX:'auto', scrollbarWidth:'none', gap:8 }}>
             <TimeframeSelector value={tf} onChange={setTf} />
             <div style={{ display:'flex', gap:2 }}>
               {['area','line','bar'].map(s => (
@@ -1150,7 +1154,8 @@ function App() {
   // Split rest into precious (XAU,XAG,XPT,XPD) and industrial (XCU,NI,XCO,BRL)
   const PRECIOUS_KEYS = ['XAU','XAG','XPT','XPD'];
   const preciousRest  = restMetals.filter(m => PRECIOUS_KEYS.includes(m.key));
-  const industrial    = restMetals.filter(m => !PRECIOUS_KEYS.includes(m.key));
+  // Always include ALL non-precious metals in the grid, even if one is the hero
+  const industrial    = METALS.filter(m => !PRECIOUS_KEYS.includes(m.key));
 
   // Expanded detail
   const expandedMetal = expandedKey ? METALS.find(m => m.key === expandedKey) : null;
@@ -1185,6 +1190,7 @@ function App() {
               tweaks={tweaks}
               onExpand={() => setExpandedKey(heroMetal.key)}
               isMobile={isMobile}
+              timeframe={timeframe}
             />
 
             {/* Precious metals grid */}

@@ -70,12 +70,19 @@ let newsInFlight: Promise<NewsItem[]> | null = null;
 
 /** Merge fresh batch into the existing accumulated list (dedup by id, prune >48 h old). */
 function mergeNews(existing: NewsItem[], fresh: NewsItem[], now: number): NewsItem[] {
-  const seen = new Set(existing.map(i => i.id));
-  const added = fresh.filter(i => !seen.has(i.id));
-  return [...added, ...existing]
-    .filter(i => i.pubMs > 0 && now - i.pubMs < NEWS_MAX_AGE_MS)
-    .sort((a, b) => b.pubMs - a.pubMs)
-    .slice(0, NEWS_MAX_ITEMS);
+  const seenIds    = new Set(existing.map(i => i.id));
+  const added      = fresh.filter(i => !seenIds.has(i.id));
+  // Secondary dedup by normalised title (catches same article with different URLs)
+  const seenTitles = new Set<string>();
+  const deduped: NewsItem[] = [];
+  for (const item of [...added, ...existing]) {
+    if (item.pubMs <= 0 || now - item.pubMs >= NEWS_MAX_AGE_MS) continue;
+    const key = item.title.trim().toLowerCase();
+    if (seenTitles.has(key)) continue;
+    seenTitles.add(key);
+    deduped.push(item);
+  }
+  return deduped.sort((a, b) => b.pubMs - a.pubMs).slice(0, NEWS_MAX_ITEMS);
 }
 
 // Single in-flight refresh guard: collapses concurrent /latest cache-miss paths into one upstream call.
