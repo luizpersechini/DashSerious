@@ -295,9 +295,13 @@ function Sparkline({ points, color, style = 'area', height = 80 }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     if (!points || points.length < 2) {
-      // Clear any chart painted by a previous timeframe selection
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Cancel any in-flight animation, then clear the canvas so no stale
+      // chart remains visible after switching to a sparse timeframe (e.g. 1D).
+      if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null; }
+      if (canvas.width > 0 && canvas.height > 0) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
       return;
     }
 
@@ -409,16 +413,20 @@ function Sparkline({ points, color, style = 'area', height = 80 }) {
       animRef.current = requestAnimationFrame(frame);
     }
 
-    // Double-rAF: ensures flex/grid layout has committed before we measure parentOffsetWidth
-    let rafId1 = requestAnimationFrame(() => {
-      let rafId2 = requestAnimationFrame(paint);
-      animRef.current = rafId2;
-    });
+    // Kick off initial paint immediately (synchronous path for when layout is already ready)
+    // and also watch via ResizeObserver for the case where layout commits later or the
+    // viewport resizes. Guard against double-cancel: if already animating at the right
+    // width, the ResizeObserver callback is a no-op.
+    paint();
 
-    const ro = new ResizeObserver(paint);
+    const ro = new ResizeObserver(() => {
+      const newW = canvas.parentElement?.offsetWidth || 0;
+      const dpr  = window.devicePixelRatio || 1;
+      // Only repaint on genuine size changes; skip if correct animation is already running
+      if (canvas.width !== Math.round(newW * dpr)) paint();
+    });
     ro.observe(canvas.parentElement || canvas);
     return () => {
-      cancelAnimationFrame(rafId1);
       ro.disconnect();
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
