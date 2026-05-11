@@ -141,8 +141,8 @@ function FilterChips({ tags, active, onChange }) {
         return (
           <button key={tag} onClick={() => onChange(isActive ? null : tag)} style={{
             ...chipStyle(isActive),
-            color:        isActive ? m.cssColor : undefined,
-            borderColor:  isActive ? m.cssColor : undefined,
+            color:       m.cssColor,
+            borderColor: isActive ? m.cssColor : 'rgba(255,255,255,0.55)',
           }}>{tag}</button>
         );
       })}
