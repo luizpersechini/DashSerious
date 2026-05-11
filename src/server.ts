@@ -354,13 +354,11 @@ app.post("/api/refresh", async (_req, res) => {
 });
 
 app.get("/api/news", async (_req, res) => {
-  if (!config.newsApiKey)
-    return res.json({ items: [], configured: false });
-
+  const configured = !!config.newsApiKey;
   try {
     const now = Date.now();
     if (newsCache && now - newsCache.fetchedAt < NEWS_CACHE_TTL_MS)
-      return res.json({ items: newsCache.items, configured: true });
+      return res.json({ items: newsCache.items, configured });
 
     if (!newsInFlight) {
       newsInFlight = fetchNews(config.newsApiKey).finally(() => { newsInFlight = null; });
@@ -370,10 +368,10 @@ app.get("/api/news", async (_req, res) => {
     const merged = mergeNews(newsCache?.items ?? [], fresh, now2);
     newsCache = { items: merged, fetchedAt: now2 };
     res.setHeader("Cache-Control", "public, max-age=60");
-    return res.json({ items: merged, configured: true });
+    return res.json({ items: merged, configured });
   } catch (err: any) {
-    if (newsCache) return res.json({ items: newsCache.items, configured: true, stale: true });
-    return res.status(502).json({ items: [], configured: true, error: String(err?.message ?? err) });
+    if (newsCache) return res.json({ items: newsCache.items, configured, stale: true });
+    return res.status(502).json({ items: [], configured, error: String(err?.message ?? err) });
   }
 });
 
