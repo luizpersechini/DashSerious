@@ -228,7 +228,7 @@ function NewsFeed({ newsData, isMobile }) {
 
   return (
     <div style={{ marginTop: isMobile ? 28 : 40 }}>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: isMobile ? 10 : 14, flexWrap:'wrap', gap:8 }}>
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', gap:8, marginBottom: isMobile ? 10 : 14 }}>
         <div style={{ display:'flex', alignItems:'baseline', gap:10 }}>
           <span style={{ fontSize:10, fontFamily:'var(--font-mono)', letterSpacing:'0.12em', color:'var(--muted)', textTransform:'uppercase' }}>
             Market News
