@@ -65,19 +65,19 @@ function stripHtml(s: string): string {
 
 function extractTag(block: string, tag: string): string {
   const m = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
-  return m ? stripCdata(m[1]).trim() : "";
+  return m ? stripCdata(m[1] ?? "").trim() : "";
 }
 
 function extractLink(block: string): string {
   // Atom: <link href="..."/>
   const atom = block.match(/<link[^>]+href=["']([^"']+)["']/i);
-  if (atom) return atom[1];
+  if (atom) return atom[1] ?? "";
   // RSS 2.0: <link>url</link>
   const rss = block.match(/<link[^>]*>([\s\S]*?)<\/link>/i);
-  if (rss) return stripCdata(rss[1]).trim();
+  if (rss) return stripCdata(rss[1] ?? "").trim();
   // <guid> as fallback
   const guid = block.match(/<guid[^>]*>([\s\S]*?)<\/guid>/i);
-  if (guid) return stripCdata(guid[1]).trim();
+  if (guid) return stripCdata(guid[1] ?? "").trim();
   return "";
 }
 
@@ -86,7 +86,7 @@ function parseRssItems(xml: string, sourceId: string): NewsDataResult[] {
   const itemRe = /<item[\s>]([\s\S]*?)<\/item>/gi;
   let match: RegExpExecArray | null;
   while ((match = itemRe.exec(xml)) !== null) {
-    const block = match[1];
+    const block = match[1] ?? "";
     const title = extractTag(block, "title");
     const link  = extractLink(block);
     if (!title || !link) continue;
