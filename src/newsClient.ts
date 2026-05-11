@@ -77,7 +77,10 @@ export async function fetchNews(apiKey: string): Promise<NewsItem[]> {
     link: r.link,
     source: r.source_id,
     pubDate: r.pubDate,
-    pubMs: Date.parse(r.pubDate) || 0,
+    // NewsData.io returns pubDate as "YYYY-MM-DD HH:MM:SS" without timezone.
+    // Force UTC parse by replacing the space with 'T' and appending 'Z',
+    // otherwise Date.parse treats it as local time (differs between prod UTC and dev UTC-3).
+    pubMs: Date.parse((r.pubDate ?? "").replace(" ", "T") + "Z") || 0,
     tags: tagArticle(r.title, r.description ?? ""),
   }));
 
