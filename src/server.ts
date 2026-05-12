@@ -15,6 +15,7 @@ type MetalCache = {
 	usdPerGram: number;
 	usdPerPound?: number;
 	usdPerMetricTon?: number;
+	usdPerBarrel?: number;
 	fxUsdBrl?: number;
 	timestamp: number;
 };
@@ -54,6 +55,7 @@ const OUNCE_GRAMS = 28.349523125;
 const POUND_GRAMS = 453.59237;
 const METRIC_TON_GRAMS = 1_000_000; // 1000 kg
 const PRECIOUS = new Set(["XAU", "XAG", "XPT", "XPD"]);
+const OIL     = new Set(["BRENT", "WTI"]);
 
 const caches = new Map<string, MetalCache>();
 const lastFetchBySymbol = new Map<string, number>();
@@ -137,6 +139,12 @@ async function refreshSymbolCache(symbol: string) {
 		lastFetchBySymbol.set(symbol, now);
 		return;
 	}
+	if (OIL.has(symbol)) {
+		const base: MetalCache = { usdPerOunce: 0, usdPerGram: 0, usdPerBarrel: 1 / unitsPerUsd, timestamp: now };
+		caches.set(symbol, base);
+		lastFetchBySymbol.set(symbol, now);
+		return;
+	}
 	const usdPerOunce = 1 / unitsPerUsd;
 	const gramsPerOunce = PRECIOUS.has(symbol) ? TROY_OUNCE_GRAMS : OUNCE_GRAMS;
 	const usdPerGram = usdPerOunce / gramsPerOunce;
@@ -177,6 +185,20 @@ async function refreshAllSymbols() {
             }
 			continue;
 		}
+		if (OIL.has(symbol)) {
+			const usdPerBarrel = 1 / unitsPerUsd;
+			const base: MetalCache = { usdPerOunce: 0, usdPerGram: 0, usdPerBarrel, timestamp: now };
+			caches.set(symbol, base);
+			lastFetchBySymbol.set(symbol, now);
+			const arr = timeseriesBySymbol.get(symbol) ?? [];
+			const lastPoint = arr[arr.length - 1];
+			if (!lastPoint || now - lastPoint.t > 60 * 1000) {
+				arr.push({ t: now, v: usdPerBarrel });
+				if (arr.length > MAX_SERIES_POINTS) arr.splice(0, arr.length - MAX_SERIES_POINTS);
+				timeseriesBySymbol.set(symbol, arr);
+			}
+			continue;
+		}
 		const usdPerOunce = 1 / unitsPerUsd;
 		const gramsPerOunce = PRECIOUS.has(symbol) ? TROY_OUNCE_GRAMS : OUNCE_GRAMS;
 		const usdPerGram = usdPerOunce / gramsPerOunce;
@@ -207,6 +229,7 @@ function getDisplayValue(symbol: string, cache: MetalCache): number {
 	if (symbol === "XCU" || symbol === "NI") return cache.usdPerPound ?? 0;
 	if (symbol === "XCO") return cache.usdPerMetricTon ?? 0;
 	if (symbol === "BRL") return cache.fxUsdBrl ?? 0;
+	if (OIL.has(symbol)) return cache.usdPerBarrel ?? 0;
 	return cache.usdPerOunce;
 }
 
@@ -274,6 +297,8 @@ const TRACKED: Array<[string, string]> = [
 	["NI", "nickel"],
 	["XCO", "cobalt"],
 	["BRL", "brl"],
+	["BRENT", "brent"],
+	["WTI", "wti"],
 ];
 
 const NAME_TO_SYMBOL = new Map<string, string>(TRACKED.map(([s, n]) => [n, s]));
@@ -458,6 +483,8 @@ setInterval(() => {
 					let v: number;
 					if (symbol === "BRL") {
 						v = unitsPerUsd;
+					} else if (OIL.has(symbol)) {
+						v = 1 / unitsPerUsd; // USD per barrel
 					} else {
 						const usdPerOunce = 1 / unitsPerUsd;
 						const gramsPerOunce = PRECIOUS.has(symbol) ? TROY_OUNCE_GRAMS : OUNCE_GRAMS;

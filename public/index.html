@@ -32,6 +32,8 @@
       --nickel:    oklch(0.72 0.14 155);
       --cobalt:    oklch(0.72 0.14 260);
       --brl:       oklch(0.72 0.14 130);
+      --brent:     oklch(0.72 0.16 55);
+      --wti:       oklch(0.72 0.16 45);
 
       --font-mono: 'DM Mono', 'Courier New', monospace;
       --font-sans: 'Syne', system-ui, sans-serif;
@@ -93,8 +95,10 @@ const METALS = [
   { key: 'XPD', name: 'Palladium', symbol: 'XPD', unit: 'USD/oz',   color: '#4db8d4', cssColor: 'var(--palladium)', fmt: v => `$${v.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}` },
   { key: 'XCU', name: 'Copper',    symbol: 'XCU', unit: 'USD/lb',   color: '#d4773a', cssColor: 'var(--copper)',    fmt: v => `$${(v-0.15).toFixed(2)}`,                                   subLabel: v => `$${Math.round((v-0.15)*2204.623).toLocaleString('en-US')} /ton` },
   { key: 'NI',  name: 'Nickel',    symbol: 'NI',  unit: 'USD/lb',   color: '#3ab87a', cssColor: 'var(--nickel)',    fmt: v => `$${(v-0.15).toFixed(2)}`,                                   subLabel: v => `$${Math.round((v-0.15)*2204.623).toLocaleString('en-US')} /ton` },
-  { key: 'XCO', name: 'Cobalt',    symbol: 'XCO', unit: 'USD/ton',  color: '#4a7fd4', cssColor: 'var(--cobalt)',    fmt: v => `$${Math.round(v).toLocaleString('en-US')}`,                  subLabel: v => `$${(v/2204.623).toFixed(2)} /lb` },
-  { key: 'BRL', name: 'USD/BRL',   symbol: 'BRL', unit: 'BRL/USD',  color: '#5ab83a', cssColor: 'var(--brl)',       fmt: v => v.toFixed(4) },
+  { key: 'XCO',   name: 'Cobalt',      symbol: 'XCO',   unit: 'USD/ton', color: '#4a7fd4', cssColor: 'var(--cobalt)',  fmt: v => `$${Math.round(v).toLocaleString('en-US')}`,                                          subLabel: v => `$${(v/2204.623).toFixed(2)} /lb` },
+  { key: 'BRL',   name: 'USD/BRL',     symbol: 'BRL',   unit: 'BRL/USD',color: '#5ab83a', cssColor: 'var(--brl)',    fmt: v => v.toFixed(4) },
+  { key: 'BRENT', name: 'Brent Crude', symbol: 'BRENT', unit: 'USD/bbl',color: '#c9822a', cssColor: 'var(--brent)', fmt: v => `$${v.toFixed(2)}` },
+  { key: 'WTI',   name: 'WTI Crude',   symbol: 'WTI',   unit: 'USD/bbl',color: '#bf6e20', cssColor: 'var(--wti)',   fmt: v => `$${v.toFixed(2)}` },
 ];
 
 // ─── LOAD TIMESERIES ─────────────────────────────────────────────────────────
