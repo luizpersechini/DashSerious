@@ -91,9 +91,9 @@ const METALS = [
   { key: 'XAG', name: 'Silver',    symbol: 'XAG', unit: 'USD/oz',   color: '#a0aec0', cssColor: 'var(--silver)',    fmt: v => `$${v.toFixed(2)}` },
   { key: 'XPT', name: 'Platinum',  symbol: 'XPT', unit: 'USD/oz',   color: '#94a3b8', cssColor: 'var(--platinum)',  fmt: v => `$${v.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}` },
   { key: 'XPD', name: 'Palladium', symbol: 'XPD', unit: 'USD/oz',   color: '#4db8d4', cssColor: 'var(--palladium)', fmt: v => `$${v.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}` },
-  { key: 'XCU', name: 'Copper',    symbol: 'XCU', unit: 'USD/lb',   color: '#d4773a', cssColor: 'var(--copper)',    fmt: v => `$${v.toFixed(2)}` },
-  { key: 'NI',  name: 'Nickel',    symbol: 'NI',  unit: 'USD/lb',   color: '#3ab87a', cssColor: 'var(--nickel)',    fmt: v => `$${v.toFixed(2)}` },
-  { key: 'XCO', name: 'Cobalt',    symbol: 'XCO', unit: 'USD/ton',  color: '#4a7fd4', cssColor: 'var(--cobalt)',    fmt: v => `$${Math.round(v).toLocaleString('en-US')}` },
+  { key: 'XCU', name: 'Copper',    symbol: 'XCU', unit: 'USD/lb',   color: '#d4773a', cssColor: 'var(--copper)',    fmt: v => `$${(v-0.15).toFixed(2)}`,                                   subLabel: v => `$${Math.round((v-0.15)*2204.623).toLocaleString('en-US')} /ton` },
+  { key: 'NI',  name: 'Nickel',    symbol: 'NI',  unit: 'USD/lb',   color: '#3ab87a', cssColor: 'var(--nickel)',    fmt: v => `$${(v-0.15).toFixed(2)}`,                                   subLabel: v => `$${Math.round((v-0.15)*2204.623).toLocaleString('en-US')} /ton` },
+  { key: 'XCO', name: 'Cobalt',    symbol: 'XCO', unit: 'USD/ton',  color: '#4a7fd4', cssColor: 'var(--cobalt)',    fmt: v => `$${Math.round(v).toLocaleString('en-US')}`,                  subLabel: v => `$${(v/2204.623).toFixed(2)} /lb` },
   { key: 'BRL', name: 'USD/BRL',   symbol: 'BRL', unit: 'BRL/USD',  color: '#5ab83a', cssColor: 'var(--brl)',       fmt: v => v.toFixed(4) },
 ];
 
@@ -532,9 +532,9 @@ function HeroCard({ metal, points, change, tweaks, onExpand, isMobile, timeframe
           {latest != null ? metal.fmt(latest) : <span className="skel" style={{ width: isMobile ? 140 : 200, height: isMobile ? 30 : 38 }} />}
         </div>
 
-        {latest != null && (metal.key === 'XCU' || metal.key === 'NI') && (
+        {latest != null && metal.subLabel && (
           <div style={{ fontFamily:'var(--font-mono)', fontSize:12, color:'var(--muted)', letterSpacing:'0.04em', marginTop:4, marginBottom:6 }}>
-            ${Math.round(latest * 2204.623).toLocaleString('en-US')}<span style={{ fontSize:10, marginLeft:4, opacity:0.7 }}>/ton</span>
+            {metal.subLabel(latest)}
           </div>
         )}
 
@@ -633,9 +633,9 @@ function CompactCard({ metal, points, change, tweaks, dense, onExpand }) {
         {latest != null ? metal.fmt(latest) : <span className="skel" style={{ width:120, height:26 }} />}
       </div>
 
-      {latest != null && (metal.key === 'XCU' || metal.key === 'NI') && (
+      {latest != null && metal.subLabel && (
         <div style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--muted)', letterSpacing:'0.04em', marginTop:3 }}>
-          ${Math.round(latest * 2204.623).toLocaleString('en-US')}<span style={{ fontSize:9, marginLeft:3, opacity:0.7 }}>/ton</span>
+          {metal.subLabel(latest)}
         </div>
       )}
 
