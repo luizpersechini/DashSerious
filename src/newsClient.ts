@@ -59,6 +59,24 @@ function stripCdata(s: string): string {
   return s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim();
 }
 
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/gi,  "&")
+    .replace(/&lt;/gi,   "<")
+    .replace(/&gt;/gi,   ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;|&#39;|&#x27;/gi, "'")
+    .replace(/&ndash;|&#8211;/gi, "–")
+    .replace(/&mdash;|&#8212;/gi, "—")
+    .replace(/&rsquo;|&#8217;/gi, "’")
+    .replace(/&lsquo;|&#8216;/gi, "‘")
+    .replace(/&rdquo;|&#8221;/gi, "”")
+    .replace(/&ldquo;|&#8220;/gi, "“")
+    .replace(/&hellip;|&#8230;/gi, "…")
+    .replace(/&#(\d+);/g,       (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
+}
+
 function stripHtml(s: string): string {
   return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -165,8 +183,8 @@ export async function fetchNews(apiKey: string): Promise<NewsItem[]> {
 
   const items: NewsItem[] = all.map(r => ({
     id:          Buffer.from(r.link).toString("base64").slice(0, 16),
-    title:       r.title,
-    description: (r.description ?? "").slice(0, 200),
+    title:       decodeEntities(r.title),
+    description: decodeEntities((r.description ?? "").slice(0, 200)),
     link:        r.link,
     source:      r.source_id,
     pubDate:     r.pubDate,
