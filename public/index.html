@@ -167,7 +167,9 @@ function NewsCard({ item }) {
       onMouseLeave={() => setHovered(false)}
       style={{
         background:    'var(--surface)',
-        border:        `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
+        borderTop:     `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
+        borderRight:   `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
+        borderBottom:  `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
         borderLeft:    '3px solid var(--dim)',
         padding:       '14px 18px',
         display:       'flex',
@@ -496,8 +498,10 @@ function HeroCard({ metal, points, change, tweaks, onExpand, isMobile, timeframe
       style={{
         position:   'relative',
         background: 'var(--surface)',
-        border:     `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
-        borderLeft: `3px solid ${metal.cssColor}`,
+        borderTop:    `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
+        borderRight:  `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
+        borderBottom: `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
+        borderLeft:   `3px solid ${metal.cssColor}`,
         padding:    isMobile ? '20px 16px' : '28px 32px',
         display:    isMobile ? 'flex' : 'grid',
         flexDirection: 'column',
@@ -605,8 +609,10 @@ function CompactCard({ metal, points, change, tweaks, dense, onExpand }) {
       style={{
         position:   'relative',
         background: 'var(--surface)',
-        border:     `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
-        borderLeft: `3px solid ${metal.cssColor}`,
+        borderTop:    `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
+        borderRight:  `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
+        borderBottom: `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
+        borderLeft:   `3px solid ${metal.cssColor}`,
         padding:    dense ? '16px 18px' : '20px 22px',
         display:    'flex',
         flexDirection: 'column',
