@@ -56,6 +56,7 @@ const POUND_GRAMS = 453.59237;
 const METRIC_TON_GRAMS = 1_000_000; // 1000 kg
 const PRECIOUS = new Set(["XAU", "XAG", "XPT", "XPD"]);
 const OIL     = new Set(["BRENT", "WTI"]);
+const FX      = new Set(["BRL", "EUR", "CAD"]);
 
 const caches = new Map<string, MetalCache>();
 const lastFetchBySymbol = new Map<string, number>();
@@ -133,7 +134,7 @@ async function refreshSymbolCache(symbol: string) {
 	}
 	const unitsPerUsd = resp.rates[symbol]; // how many units of symbol per 1 USD
 
-	if (symbol === "BRL") {
+	if (FX.has(symbol)) {
 		const base: MetalCache = { usdPerOunce: 0, usdPerGram: 0, fxUsdBrl: unitsPerUsd, timestamp: now };
 		caches.set(symbol, base);
 		lastFetchBySymbol.set(symbol, now);
@@ -172,7 +173,7 @@ async function refreshAllSymbols() {
 		const rate = resp.rates[symbol as keyof typeof resp.rates];
 		if (rate == null) continue;
 		const unitsPerUsd = rate;
-		if (symbol === "BRL") {
+		if (FX.has(symbol)) {
 			const base: MetalCache = { usdPerOunce: 0, usdPerGram: 0, fxUsdBrl: unitsPerUsd, timestamp: now };
 			caches.set(symbol, base);
 			lastFetchBySymbol.set(symbol, now);
@@ -228,7 +229,7 @@ async function refreshAllSymbols() {
 function getDisplayValue(symbol: string, cache: MetalCache): number {
 	if (symbol === "XCU" || symbol === "NI") return cache.usdPerPound ?? 0;
 	if (symbol === "XCO") return cache.usdPerMetricTon ?? 0;
-	if (symbol === "BRL") return cache.fxUsdBrl ?? 0;
+	if (FX.has(symbol)) return cache.fxUsdBrl ?? 0;
 	if (OIL.has(symbol)) return cache.usdPerBarrel ?? 0;
 	return cache.usdPerOunce;
 }
@@ -299,6 +300,8 @@ const TRACKED: Array<[string, string]> = [
 	["BRL", "brl"],
 	["BRENT", "brent"],
 	["WTI", "wti"],
+	["EUR", "eur"],
+	["CAD", "cad"],
 ];
 
 const NAME_TO_SYMBOL = new Map<string, string>(TRACKED.map(([s, n]) => [n, s]));
@@ -481,7 +484,7 @@ setInterval(() => {
 					const unitsPerUsd = dayRates[symbol as keyof typeof dayRates];
 					if (unitsPerUsd == null) continue;
 					let v: number;
-					if (symbol === "BRL") {
+					if (FX.has(symbol)) {
 						v = unitsPerUsd;
 					} else if (OIL.has(symbol)) {
 						v = 1 / unitsPerUsd; // USD per barrel

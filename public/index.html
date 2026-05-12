@@ -34,6 +34,8 @@
       --brl:       oklch(0.72 0.14 130);
       --brent:     oklch(0.72 0.16 55);
       --wti:       oklch(0.72 0.16 45);
+      --eur:       oklch(0.72 0.10 270);
+      --cad:       oklch(0.72 0.14 25);
 
       --font-mono: 'DM Mono', 'Courier New', monospace;
       --font-sans: 'Syne', system-ui, sans-serif;
@@ -99,6 +101,8 @@ const METALS = [
   { key: 'BRL',   name: 'USD/BRL',     symbol: 'BRL',   unit: 'BRL/USD',color: '#5ab83a', cssColor: 'var(--brl)',    fmt: v => v.toFixed(4) },
   { key: 'BRENT', name: 'Brent Crude', symbol: 'BRENT', unit: 'USD/bbl',color: '#c9822a', cssColor: 'var(--brent)', fmt: v => `$${v.toFixed(2)}` },
   { key: 'WTI',   name: 'WTI Crude',   symbol: 'WTI',   unit: 'USD/bbl',color: '#bf6e20', cssColor: 'var(--wti)',   fmt: v => `$${v.toFixed(2)}` },
+  { key: 'EUR',   name: 'EUR/USD',      symbol: 'EUR',   unit: 'EUR/USD', color: '#7b8fcc', cssColor: 'var(--eur)',   fmt: v => v.toFixed(4) },
+  { key: 'CAD',   name: 'USD/CAD',      symbol: 'CAD',   unit: 'CAD/USD', color: '#cc6b4a', cssColor: 'var(--cad)',   fmt: v => v.toFixed(4) },
 ];
 
 // ─── LOAD TIMESERIES ─────────────────────────────────────────────────────────
