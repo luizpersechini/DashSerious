@@ -34,7 +34,7 @@ const METAL_KEYWORDS: Array<{ tag: string; terms: string[] }> = [
   { tag: "XAG", terms: ["silver", "xag"] },
   { tag: "XCO", terms: ["cobalt"] },
   { tag: "XCU", terms: ["copper"] },
-  { tag: "NI",  terms: ["nickel"] },
+  { tag: "NI", terms: ["nickel"] },
   { tag: "BRL", terms: ["brl", "real", "brazilian real"] },
 ];
 
@@ -48,9 +48,12 @@ const QUERIES = [
 
 // RSS feeds — no API key required, fetched on every refresh cycle
 const RSS_FEEDS: Array<{ url: string; sourceId: string }> = [
-  { url: "https://www.kitco.com/rss/kitconews.rss",               sourceId: "kitco" },
-  { url: "https://www.mining.com/feed/",                          sourceId: "mining.com" },
-  { url: "https://www.cnbc.com/id/19836768/device/rss/rss.html",  sourceId: "cnbc" },
+  { url: "https://www.kitco.com/rss/kitconews.rss", sourceId: "kitco" },
+  { url: "https://www.mining.com/feed/", sourceId: "mining.com" },
+  {
+    url: "https://www.cnbc.com/id/19836768/device/rss/rss.html",
+    sourceId: "cnbc",
+  },
 ];
 
 // ── RSS helpers ────────────────────────────────────────────────────────────────
@@ -61,9 +64,9 @@ function stripCdata(s: string): string {
 
 function decodeEntities(s: string): string {
   return s
-    .replace(/&amp;/gi,  "&")
-    .replace(/&lt;/gi,   "<")
-    .replace(/&gt;/gi,   ">")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
     .replace(/&apos;|&#39;|&#x27;/gi, "'")
     .replace(/&ndash;|&#8211;/gi, "–")
@@ -73,16 +76,23 @@ function decodeEntities(s: string): string {
     .replace(/&rdquo;|&#8221;/gi, "”")
     .replace(/&ldquo;|&#8220;/gi, "“")
     .replace(/&hellip;|&#8230;/gi, "…")
-    .replace(/&#(\d+);/g,       (_, n) => String.fromCharCode(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) =>
+      String.fromCharCode(parseInt(h, 16)),
+    );
 }
 
 function stripHtml(s: string): string {
-  return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return s
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function extractTag(block: string, tag: string): string {
-  const m = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  const m = block.match(
+    new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"),
+  );
   return m ? stripCdata(m[1] ?? "").trim() : "";
 }
 
@@ -106,10 +116,11 @@ function parseRssItems(xml: string, sourceId: string): NewsDataResult[] {
   while ((match = itemRe.exec(xml)) !== null) {
     const block = match[1] ?? "";
     const title = extractTag(block, "title");
-    const link  = extractLink(block);
+    const link = extractLink(block);
     if (!title || !link) continue;
-    const desc    = extractTag(block, "description");
-    const pubDate = extractTag(block, "pubDate") || extractTag(block, "dc:date");
+    const desc = extractTag(block, "description");
+    const pubDate =
+      extractTag(block, "pubDate") || extractTag(block, "dc:date");
     items.push({
       title,
       description: desc ? stripHtml(desc) : null,
@@ -122,7 +133,10 @@ function parseRssItems(xml: string, sourceId: string): NewsDataResult[] {
   return items;
 }
 
-async function fetchRssFeed(url: string, sourceId: string): Promise<NewsDataResult[]> {
+async function fetchRssFeed(
+  url: string,
+  sourceId: string,
+): Promise<NewsDataResult[]> {
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; DashBot/1.0)" },
@@ -154,17 +168,23 @@ function tagArticle(title: string, description: string): string[] {
   const text = (title + " " + description).toLowerCase();
   const tags: string[] = [];
   for (const { tag, terms } of METAL_KEYWORDS) {
-    if (terms.some(t => text.includes(t))) tags.push(tag);
+    if (terms.some((t) => text.includes(t))) tags.push(tag);
   }
   return tags;
 }
 
-async function fetchQuery(query: string, apiKey: string): Promise<NewsDataResult[]> {
+async function fetchQuery(
+  query: string,
+  apiKey: string,
+): Promise<NewsDataResult[]> {
   const url = new URL(BASE_URL);
   url.searchParams.set("q", query);
   url.searchParams.set("language", "en");
   url.searchParams.set("apikey", apiKey);
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), {
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) return []; // soft-fail per query
   const data = (await res.json()) as NewsDataResponse;
   if (data.status !== "success") return []; // soft-fail per query
   return data.results ?? [];
@@ -172,49 +192,74 @@ async function fetchQuery(query: string, apiKey: string): Promise<NewsDataResult
 
 export async function fetchNews(apiKey: string): Promise<NewsItem[]> {
   // NewsData.io queries only run when a key is provided
-  const apiSources = apiKey
-    ? QUERIES.map(q => fetchQuery(q, apiKey))
-    : [];
+  const apiSources = apiKey ? QUERIES.map((q) => fetchQuery(q, apiKey)) : [];
 
-  const rssSources = RSS_FEEDS.map(f => fetchRssFeed(f.url, f.sourceId));
+  const rssSources = RSS_FEEDS.map((f) => fetchRssFeed(f.url, f.sourceId));
 
   const results = await Promise.all([...apiSources, ...rssSources]);
   const all = results.flat();
 
-  const items: NewsItem[] = all.map(r => ({
-    id:          Buffer.from(r.link).toString("base64").slice(0, 16),
-    title:       decodeEntities(r.title),
+  const items: NewsItem[] = all.map((r) => ({
+    id: Buffer.from(r.link).toString("base64").slice(0, 16),
+    title: decodeEntities(r.title),
     description: decodeEntities((r.description ?? "").slice(0, 200)),
-    link:        r.link,
-    source:      r.source_id,
-    pubDate:     r.pubDate,
-    pubMs:       parsePubDate(r.pubDate),
-    tags:        tagArticle(r.title, r.description ?? ""),
+    link: r.link,
+    source: r.source_id,
+    pubDate: r.pubDate,
+    pubMs: parsePubDate(r.pubDate),
+    tags: tagArticle(r.title, r.description ?? ""),
   }));
 
   const RELEVANCE_TERMS = [
-    "gold","silver","platinum","palladium","nickel","copper","cobalt",
-    "metal","mineral","mining","commodity","commodities",
-    "brl","brazil","real exchange",
-    "geopolit","sanction","tariff","trade war","supply chain",
-    "market","price","invest","economy","inflation","fed ","interest rate",
-    "iran","russia","china trade","opec",
+    "gold",
+    "silver",
+    "platinum",
+    "palladium",
+    "nickel",
+    "copper",
+    "cobalt",
+    "metal",
+    "mineral",
+    "mining",
+    "commodity",
+    "commodities",
+    "brl",
+    "brazil",
+    "real exchange",
+    "geopolit",
+    "sanction",
+    "tariff",
+    "trade war",
+    "supply chain",
+    "market",
+    "price",
+    "invest",
+    "economy",
+    "inflation",
+    "fed ",
+    "interest rate",
+    "iran",
+    "russia",
+    "china trade",
+    "opec",
   ];
 
   function isRelevant(item: NewsItem): boolean {
     if (item.tags.length > 0) return true;
     const text = (item.title + " " + item.description).toLowerCase();
-    return RELEVANCE_TERMS.some(t => text.includes(t));
+    return RELEVANCE_TERMS.some((t) => text.includes(t));
   }
 
   // Deduplicate by normalised title, then filter relevance
   const seen = new Set<string>();
-  const unique = items.filter(item => {
-    const key = item.title.trim().toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).filter(isRelevant);
+  const unique = items
+    .filter((item) => {
+      const key = item.title.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .filter(isRelevant);
 
   return unique.sort((a, b) => b.pubMs - a.pubMs).slice(0, 30);
 }
