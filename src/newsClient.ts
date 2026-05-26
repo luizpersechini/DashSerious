@@ -47,8 +47,8 @@ const QUERIES = [
 ];
 
 // RSS feeds — no API key required, fetched on every refresh cycle
+// kitco.com removed 2026-05-12: their RSS feed returned 404 after a Next.js migration
 const RSS_FEEDS: Array<{ url: string; sourceId: string }> = [
-  { url: "https://www.kitco.com/rss/kitconews.rss", sourceId: "kitco" },
   { url: "https://www.mining.com/feed/", sourceId: "mining.com" },
   {
     url: "https://www.cnbc.com/id/19836768/device/rss/rss.html",
@@ -139,7 +139,10 @@ async function fetchRssFeed(
 ): Promise<NewsDataResult[]> {
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; DashBot/1.0)" },
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      },
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return [];
