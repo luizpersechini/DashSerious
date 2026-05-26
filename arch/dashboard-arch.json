@@ -2,9 +2,10 @@
   "_meta": {
     "project": "DashSerious",
     "version": "1.2.4",
-    "generated": "2026-05-12",
+    "generated": "2026-05-26",
     "purpose": "Architecture reference for agents implementing new features",
-    "repo": "https://github.com/luizpersechini/DashSerious"
+    "repo": "https://github.com/luizpersechini/DashSerious",
+    "lastMajorChanges": "Resilience hardening: self-rescheduling refresh with retry+backoff, Promise.race hard-timeout on refresh, per-chunk seed try/catch, 503+Retry-After gate, /health diagnostics, structured JSON logging, removed user refresh button. Cloud Run: --min-instances 1, --update-env-vars. Plan: essential→basic."
   },
 
   "stack": {
@@ -13,46 +14,94 @@
     "language": "TypeScript 5 (strict, noUncheckedIndexedAccess)",
     "frontend": "React 18.3 + Babel standalone (no build step — single HTML file)",
     "charts": "Canvas-based Sparkline (custom) + lightweight-charts served from /lib",
-    "persistence": "JSON on disk (data/timeseries.json), in-memory Map during run",
+    "persistence": "JSON on disk (data/timeseries.json) — note: tmpfs on Cloud Run, see knownGotchas",
     "deploy": "Docker → GCP Artifact Registry → Cloud Run (southamerica-east1)"
   },
 
   "files": {
-    "src/server.ts":         "Express entry point, all routes, caches, refresh scheduler, seed runner",
-    "src/config.ts":         "Env-var loader (hand-rolled dotenv), exports config object + assertConfig()",
-    "src/metalpriceClient.ts": "metalpriceapi.com HTTP client — fetchLatest, fetchTimeframe, fetchChange",
-    "src/newsClient.ts":     "NewsData.io + RSS feed fetcher, HTML entity decoder, article tagging",
-    "src/storage.ts":        "Timeseries disk persistence — hydrateTimeseries, persistTimeseries, SIGTERM hook",
-    "public/index.html":     "Entire frontend: React components, METALS config, state, data fetching",
+    "src/server.ts": "Express entry point, all routes, caches, refresh scheduler, seed runner, /health diagnostics",
+    "src/config.ts": "Env-var loader (hand-rolled dotenv), exports config object + assertConfig()",
+    "src/metalpriceClient.ts": "metalpriceapi.com HTTP client — fetchLatest(20s), fetchTimeframe(60s), fetchChange(20s)",
+    "src/newsClient.ts": "NewsData.io + RSS feed fetcher, HTML entity decoder, article tagging",
+    "src/storage.ts": "Timeseries disk persistence — hydrateTimeseries, persistTimeseries, SIGTERM hook",
+    "public/index.html": "Entire frontend: React components, METALS config, state, data fetching",
     "public/tweaks-panel.jsx": "Draggable dev panel (postMessage protocol); useTweaks hook + UI components",
-    "data/timeseries.json":  "Runtime-generated timeseries cache (gitignored)",
-    "scripts/fetchGold.ts":  "Standalone gold price backfill script",
+    "data/timeseries.json": "Runtime-generated timeseries cache (gitignored; ephemeral on Cloud Run)",
+    "scripts/fetchGold.ts": "Standalone gold price backfill script",
     "scripts/exportCobalt.ts": "Cobalt price → XLSX export",
-    "Dockerfile":            "Two-stage build: builder (npm ci + tsc) → runner (node dist/server.js)",
-    ".github/workflows/deploy.yml": "Push to main → docker build → push to Artifact Registry → Cloud Run deploy"
+    "Dockerfile": "Two-stage build: builder (npm ci + tsc) → runner (node dist/server.js)",
+    ".github/workflows/deploy-cloud-run.yml": "Push to main → docker build → push to Artifact Registry → Cloud Run deploy"
   },
 
   "env": {
-    "METALPRICE_API_KEY":      { "required": true,  "default": null,    "description": "metalpriceapi.com key" },
-    "METALPRICE_API_BASE":     { "required": false, "default": "https://api.metalpriceapi.com/v1" },
-    "METALPRICE_PLAN":         { "required": false, "default": "essential", "options": ["essential","basic","basicplus","professional","professionalplus","proplus","business"] },
-    "METALPRICE_MONTHLY_QUOTA":{ "required": false, "default": 1000, "description": "currently unused in logic" },
-    "METALPRICE_REFRESH_MINUTES": { "required": false, "default": null, "description": "manual override for poll interval" },
-    "SEED_DEPTH_DAYS":         { "required": false, "default": 1825, "description": "days of history to seed on startup (5 years)" },
-    "NEWS_API_KEY":            { "required": false, "default": null, "description": "newsdata.io key; RSS feeds work without it" },
-    "PORT":                    { "required": false, "default": 3000 }
+    "METALPRICE_API_KEY": {
+      "required": true,
+      "default": null,
+      "description": "metalpriceapi.com key"
+    },
+    "METALPRICE_API_BASE": {
+      "required": false,
+      "default": "https://api.metalpriceapi.com/v1"
+    },
+    "METALPRICE_PLAN": {
+      "required": false,
+      "default": "essential",
+      "prodValue": "basic",
+      "options": [
+        "essential",
+        "basic",
+        "basicplus",
+        "professional",
+        "professionalplus",
+        "proplus",
+        "business"
+      ],
+      "description": "drives default refresh interval: essential=30min basic=10min professional=60s proplus=30s business=15s"
+    },
+    "METALPRICE_MONTHLY_QUOTA": {
+      "required": false,
+      "default": 1000,
+      "description": "currently unused in logic"
+    },
+    "METALPRICE_REFRESH_MINUTES": {
+      "required": false,
+      "default": null,
+      "prodValue": "5",
+      "description": "manual override for poll interval; in prod set to 5min (Basic plan = 10k calls/mo)"
+    },
+    "SEED_DEPTH_DAYS": {
+      "required": false,
+      "default": 1825,
+      "description": "days of history to seed on startup (5 years)"
+    },
+    "NEWS_API_KEY": {
+      "required": false,
+      "default": null,
+      "description": "newsdata.io key; RSS feeds work without it"
+    },
+    "REFRESH_TOKEN": {
+      "required": false,
+      "default": "",
+      "description": "if set, /api/refresh requires x-refresh-token header matching this value. Wired through deploy workflow via GitHub secret of same name."
+    },
+    "CORS_ALLOW_ORIGINS": {
+      "required": false,
+      "default": "",
+      "description": "comma-separated origins for CORS allowlist; empty = same-origin only. Wired through deploy workflow via GitHub secret."
+    },
+    "PORT": { "required": false, "default": 3000 }
   },
 
   "externalApis": {
     "metalpriceapi": {
       "base": "https://api.metalpriceapi.com/v1",
       "endpoints": {
-        "latest":    "GET /latest?api_key&base=USD&currencies=... — current rates for all TRACKED symbols",
-        "timeframe": "GET /timeframe?api_key&start_date&end_date&base=USD&currencies=... — historical OHLC (used for seed)",
-        "change":    "GET /change?api_key&date_type&base=USD&currencies=... — % change over period"
+        "latest": "GET /latest?api_key&base=USD&currencies=... — current rates for all TRACKED symbols. 20s timeout.",
+        "timeframe": "GET /timeframe?api_key&start_date&end_date&base=USD&currencies=... — historical data (used for seed). 60s timeout (Cloud Run latency).",
+        "change": "GET /change?api_key&date_type&base=USD&currencies=... — % change over period. 20s timeout."
       },
       "rateFormat": "response.rates[SYMBOL] = unitsPerUSD (e.g. 0.0095 barrels/USD for oil, 0.000213 oz/USD for gold)",
-      "plan": "Essential: 30-min refresh, 1000 req/month. BRENT+WTI confirmed available on Essential."
+      "plan": "Basic: 10k req/mo, 10-min refresh default. In prod overridden to 5min via METALPRICE_REFRESH_MINUTES (~8640 calls/mo, 86% of quota). BRENT, WTI, EUR, CAD all available on Basic."
     },
     "newsdata_io": {
       "base": "https://newsdata.io/api/1/latest",
@@ -62,64 +111,141 @@
       ],
       "params": "q, language=en, apikey",
       "limits": "200 credits/day free tier",
-      "note": "Only called when NEWS_API_KEY is set"
+      "note": "Only called when NEWS_API_KEY is set. RSS feeds always run."
     },
     "rssFeeds": [
-      { "url": "https://www.kitco.com/rss/kitconews.rss", "sourceId": "kitco",      "note": "gold/silver/PGM specialist" },
-      { "url": "https://www.mining.com/feed/",            "sourceId": "mining.com", "note": "cobalt/nickel/copper/lithium industry" },
-      { "url": "https://www.cnbc.com/id/19836768/device/rss/rss.html", "sourceId": "cnbc", "note": "broad commodities" }
-    ]
+      {
+        "url": "https://www.mining.com/feed/",
+        "sourceId": "mining.com",
+        "note": "cobalt/nickel/copper/lithium industry — primary source"
+      },
+      {
+        "url": "https://www.cnbc.com/id/19836768/device/rss/rss.html",
+        "sourceId": "cnbc",
+        "note": "broad commodities; requires browser-style User-Agent (CNBC blocks bot-shaped UAs)"
+      }
+    ],
+    "rssFeedsRemoved": [
+      {
+        "url": "https://www.kitco.com/rss/kitconews.rss",
+        "removed": "2026-05-12",
+        "reason": "404 after Kitco Next.js migration; no working replacement endpoint"
+      }
+    ],
+    "rssUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
   },
 
   "symbols": {
-    "PRECIOUS": ["XAU","XAG","XPT","XPD"],
-    "INDUSTRIAL": ["XCU","NI","XCO"],
-    "FX": ["BRL","EUR","CAD"],
-    "OIL": ["BRENT","WTI"],
-    "all_tracked": ["XAU","XAG","XPT","XPD","XCU","NI","XCO","BRL","BRENT","WTI","EUR","CAD"],
+    "PRECIOUS": ["XAU", "XAG", "XPT", "XPD"],
+    "INDUSTRIAL": ["XCU", "NI", "XCO"],
+    "FX": ["BRL", "EUR", "CAD"],
+    "OIL": ["BRENT", "WTI"],
+    "all_tracked": [
+      "XAU",
+      "XAG",
+      "XPT",
+      "XPD",
+      "XCU",
+      "NI",
+      "XCO",
+      "BRL",
+      "BRENT",
+      "WTI",
+      "EUR",
+      "CAD"
+    ],
     "conversion": {
-      "PRECIOUS":    "usdPerOunce = 1/rate; usdPerGram = usdPerOunce / 31.1034768 (troy oz)",
-      "INDUSTRIAL":  "usdPerOunce = 1/rate; usdPerGram = usdPerOunce / 28.349523125 (avdp oz); usdPerPound = usdPerGram * 453.59237",
-      "XCO":         "same as industrial but stores usdPerMetricTon = usdPerGram * 1_000_000",
-      "FX":          "stored as fxUsdXxx = unitsPerUsd (direct exchange rate, e.g. BRL per 1 USD)",
-      "OIL":         "usdPerBarrel = 1 / unitsPerUsd"
+      "PRECIOUS": "usdPerOunce = 1/rate; usdPerGram = usdPerOunce / 31.1034768 (troy oz)",
+      "INDUSTRIAL": "usdPerOunce = 1/rate; usdPerGram = usdPerOunce / 28.349523125 (avdp oz); usdPerPound = usdPerGram * 453.59237",
+      "XCO": "same as industrial but stores usdPerMetricTon = usdPerGram * 1_000_000",
+      "FX": "stored as fxUsdXxx = unitsPerUsd (direct exchange rate, e.g. BRL per 1 USD)",
+      "OIL": "usdPerBarrel = 1 / unitsPerUsd"
     },
     "displayUnit": {
-      "XAU":"USD/oz", "XAG":"USD/oz", "XPT":"USD/oz", "XPD":"USD/oz",
-      "XCU":"USD/lb", "NI":"USD/lb",
-      "XCO":"USD/ton",
-      "BRL":"BRL/USD", "EUR":"EUR/USD", "CAD":"CAD/USD",
-      "BRENT":"USD/bbl", "WTI":"USD/bbl"
+      "XAU": "USD/oz",
+      "XAG": "USD/oz",
+      "XPT": "USD/oz",
+      "XPD": "USD/oz",
+      "XCU": "USD/lb",
+      "NI": "USD/lb",
+      "XCO": "USD/ton",
+      "BRL": "BRL/USD",
+      "EUR": "EUR/USD",
+      "CAD": "CAD/USD",
+      "BRENT": "USD/bbl",
+      "WTI": "USD/bbl"
     },
     "displayAdjustments": {
       "XCU": "-0.15 subtracted from lb price before display (visual correction)",
-      "NI":  "-0.15 subtracted from lb price before display (visual correction)"
+      "NI": "-0.15 subtracted from lb price before display (visual correction)"
     }
   },
 
   "routes": [
-    { "method": "GET",  "path": "/api/metal/:name/latest",         "returns": "{ success, data: MetalCache }" },
-    { "method": "GET",  "path": "/api/metal/:name/timeseries",     "returns": "{ success, data: { points: [{t,v}], seedPending } }" },
-    { "method": "GET",  "path": "/api/metal/:name/change",         "returns": "proxied fetchChange() response; ?date_type=recent|yesterday|week|month|year" },
-    { "method": "GET",  "path": "/api/{name}/latest",              "note": "per-name aliases for all 12 symbols (backward compat)" },
-    { "method": "GET",  "path": "/api/{name}/timeseries",          "note": "per-name alias" },
-    { "method": "GET",  "path": "/api/{name}/change",              "note": "per-name alias" },
-    { "method": "GET",  "path": "/api/allmetals/timeseries",       "returns": "{ success, symbols: { [sym]: [{t,v}] } }; ?limit=N (default 100)" },
-    { "method": "POST", "path": "/api/refresh",                    "returns": "{ success, message }; clears caches, re-fetches all symbols" },
-    { "method": "GET",  "path": "/api/news",                       "returns": "{ items: NewsItem[], configured: bool, stale?: bool }; 30-min cache" },
-    { "method": "GET",  "path": "/api/version",                    "returns": "{ version }; cached 1h" },
-    { "method": "GET",  "path": "/health",                         "returns": "{ ok, cacheWarm, cachedSymbols, seedComplete, uptimeMs }" }
+    {
+      "method": "GET",
+      "path": "/api/metal/:name/latest",
+      "returns": "{ success, data: MetalCache }; ETag + Cache-Control:30s"
+    },
+    {
+      "method": "GET",
+      "path": "/api/metal/:name/timeseries",
+      "returns": "{ success, data: { points: [{t,v}], seedPending } }"
+    },
+    {
+      "method": "GET",
+      "path": "/api/metal/:name/change",
+      "returns": "proxied fetchChange() response; ?date_type=recent|yesterday|week|month|year"
+    },
+    {
+      "method": "GET",
+      "path": "/api/{name}/latest",
+      "note": "per-name aliases for all 12 symbols (backward compat)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/{name}/timeseries",
+      "note": "per-name alias"
+    },
+    { "method": "GET", "path": "/api/{name}/change", "note": "per-name alias" },
+    {
+      "method": "GET",
+      "path": "/api/allmetals/timeseries",
+      "returns": "{ success, symbols: { [sym]: [{t,v}] } }; ?limit=N. Used by frontend."
+    },
+    {
+      "method": "POST",
+      "path": "/api/refresh",
+      "returns": "{ success, message }; clears caches, re-fetches all symbols. Frontend button REMOVED — kept as debug/cron endpoint. Gated by REFRESH_TOKEN if set."
+    },
+    {
+      "method": "GET",
+      "path": "/api/news",
+      "returns": "{ items: NewsItem[], configured: bool, stale?: bool }; 30-min cache"
+    },
+    {
+      "method": "GET",
+      "path": "/api/version",
+      "returns": "{ version }; cached 1h"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "returns": "{ ok, cacheWarm, cachedSymbols, seedComplete, uptimeMs, refresh: { intervalMs, lastRefreshAt, lastRefreshError, nextRefreshAt, msSinceLastSuccess }, data: { totalFailedChunks, oldestPoint, newestPoint } }"
+    }
   ],
 
   "serverInternals": {
     "caches": "Map<symbol, MetalCache> — in-memory, keyed by symbol string",
     "lastFetchBySymbol": "Map<symbol, timestamp> — guards MIN_REFRESH_MS (60s) per symbol",
     "timeseriesBySymbol": "Map<symbol, SeriesPoint[]> — MAX_SERIES_POINTS=4000; appended every refresh if >60s since last point",
-    "coalesceRefresh": "Singleton-promise pattern — concurrent cache-miss requests collapse into one upstream call",
-    "ready": "Promise that resolves after first refresh or READY_TIMEOUT_MS (10s); all /api routes await it",
-    "seedHistory": "IIFE on startup; fetches historical data in 365-day chunks; skips already-covered ranges; 500ms between chunks",
-    "persistInterval": "setInterval(persistTimeseries, 5min) during run; SIGTERM/SIGINT flush via registerGracefulPersist",
-    "newsCache": "{ items: NewsItem[], fetchedAt: number }; TTL 30min; stale-on-error fallback; max 60 items, 48h age"
+    "coalesceRefresh": "Singleton-promise pattern with Promise.race against 30s hard timer. The hard timer guards against AbortSignal.timeout silently missing the response stream in undici (observed 2026-05-26). Without the guard, a hung fetch wedges the singleton forever.",
+    "periodicRefresh": "Self-rescheduling setTimeout (not setInterval). On success: schedules next at REFRESH_INTERVAL_MS. On failure: schedules retry at 60s and logs structured JSON to stderr (Cloud Logging severity=ERROR).",
+    "ready": "Promise resolves after first refresh OR READY_TIMEOUT_MS (10s); /api gate awaits it then 503s if BOTH caches.size===0 AND timeseriesBySymbol.size===0",
+    "seedHistory": "IIFE on startup; fetches historical data in 365-day chunks; per-chunk try/catch (audit #6) — one failed chunk no longer kills the seed. seedComplete=true even on outer failure (audit #12) so UI doesn't hang.",
+    "persistInterval": "setInterval(persistTimeseries, 5min) during run; SIGTERM/SIGINT flush via registerGracefulPersist. NOTE: tmpfs on Cloud Run — see knownGotchas",
+    "newsCache": "{ items: NewsItem[], fetchedAt: number }; TTL 30min; stale-on-error fallback; max 60 items, 48h age",
+    "diagnostics": "Module-scoped state: lastRefreshAt, lastRefreshError, nextRefreshAt, totalFailedChunks — exposed via /health for ops visibility"
   },
 
   "frontend": {
@@ -129,60 +255,143 @@
         "GET /api/news → newsData state",
         "GET /api/version → appVersion state"
       ],
-      "onRefresh": "POST /api/refresh → then re-fetch /api/allmetals/timeseries"
+      "refreshButton": "REMOVED 2026-05-26. Server auto-refreshes every 5min; manual refresh was redundant and a security risk vs /api/refresh."
     },
     "state": {
-      "rawData":     "full timeseries response; keyed by symbol",
-      "timeframe":   "selected window in days; options: 1,5,30,90,365,1095,0(ALL); default 365",
-      "tweaks":      "persisted layout config: layout, density, chartStyle, showChange, heroMetal, colorScheme",
+      "rawData": "full timeseries response; keyed by symbol",
+      "timeframe": "selected window in days; options: 1,5,30,90,365,1095,0(ALL); default 365",
+      "tweaks": "persisted layout config: layout, density, chartStyle, showChange, heroMetal, colorScheme",
       "expandedKey": "symbol key of open DetailPanel, or null",
-      "newsData":    "{ items, configured } from /api/news",
-      "appVersion":  "string from /api/version",
-      "lastUpdated": "string; derived from latest XAU timestamp",
-      "refreshing":  "bool"
+      "newsData": "{ items, configured } from /api/news",
+      "appVersion": "string from /api/version",
+      "lastUpdated": "string; derived from latest XAU timestamp"
     },
     "layout": {
       "editorial": "HeroCard (large, heroMetal) + PreciousMetals grid + Industrial&FX grid + NewsFeed",
-      "grid":      "all metals in a single flat grid (no hero)",
-      "default":   "editorial",
+      "grid": "all metals in a single flat grid (no hero)",
+      "default": "editorial",
       "heroDefault": "NI (Nickel)",
       "preciousSplit": "PRECIOUS_KEYS = ['XAU','XAG','XPT','XPD']",
       "industrialSet": "all METALS where key not in PRECIOUS_KEYS (currently: XCU,NI,XCO,BRL,BRENT,WTI,EUR,CAD)"
     },
     "components": {
-      "App":               "Root; owns all state, data fetching, routing",
-      "Header":            "Sticky top; brand, date, refresh button, version",
-      "TickerTape":        "Horizontal scrollable strip; shows all 12 prices with % change",
+      "App": "Root; owns all state, data fetching, routing. Refreshing state and handleRefresh removed.",
+      "Header": "Sticky top; brand, date, version. Refresh button removed.",
+      "TickerTape": "Horizontal scrollable strip; shows all 12 prices with % change",
       "TimeframeSelector": "7-button group: 1D/5D/30D/90D/1Y/3Y/ALL",
-      "SectionLabel":      "Section header with optional sub-text",
-      "HeroCard":          "Large card; 2-col grid (meta+price / sparkline); low/high stats; subLabel",
-      "CompactCard":       "Smaller card; price + mini sparkline; subLabel if metal.subLabel defined",
-      "DetailPanel":       "Slide-in drawer (right on desktop, bottom on mobile); full chart, stats table, period returns",
-      "Sparkline":         "Canvas; supports area/line/bar styles; 800ms animated entry; ResizeObserver + DPR-aware",
-      "ChangeBadge":       "% change with directional arrow; green=up, red=down, muted=flat",
-      "FilterChips":       "ALL + per-metal tag buttons for news feed; active chip uses metal.cssColor",
-      "NewsCard":          "Article card; source, timeAgo, title link, description excerpt, tag badges",
-      "NewsFeed":          "News section; loading skeleton, unconfigured hint, filter chips, article list"
+      "SectionLabel": "Section header with optional sub-text",
+      "HeroCard": "Large card; 2-col grid (meta+price / sparkline); low/high stats; subLabel. Uses borderTop/Right/Bottom + borderLeft separately to avoid hover transition bug.",
+      "CompactCard": "Smaller card; price + mini sparkline; subLabel if metal.subLabel defined. Same border pattern as HeroCard.",
+      "DetailPanel": "Slide-in drawer (right on desktop, bottom on mobile); full chart, stats table, period returns",
+      "Sparkline": "Canvas; supports area/line/bar styles; 800ms animated entry; ResizeObserver + DPR-aware. Calls paint() synchronously; ResizeObserver only repaints on genuine width change.",
+      "ChangeBadge": "% change with directional arrow; green=up, red=down, muted=flat",
+      "FilterChips": "ALL + per-metal tag buttons for news feed; inactive chip shows metal cssColor as text + white border (consistent with mobile contrast)",
+      "NewsCard": "Article card; source, timeAgo, title link (entities decoded), description excerpt, tag badges",
+      "NewsFeed": "News section; loading skeleton, unconfigured hint, filter chips, article list"
     },
     "metals": [
-      { "key":"XAU",   "name":"Gold",        "unit":"USD/oz",  "color":"#d4a43a", "cssColor":"var(--gold)",      "subLabel":null },
-      { "key":"XAG",   "name":"Silver",      "unit":"USD/oz",  "color":"#a0aec0", "cssColor":"var(--silver)",    "subLabel":null },
-      { "key":"XPT",   "name":"Platinum",    "unit":"USD/oz",  "color":"#94a3b8", "cssColor":"var(--platinum)",  "subLabel":null },
-      { "key":"XPD",   "name":"Palladium",   "unit":"USD/oz",  "color":"#4db8d4", "cssColor":"var(--palladium)", "subLabel":null },
-      { "key":"XCU",   "name":"Copper",      "unit":"USD/lb",  "color":"#d4773a", "cssColor":"var(--copper)",    "subLabel":"$/ton (×2204.623, after −0.15 adj)" },
-      { "key":"NI",    "name":"Nickel",      "unit":"USD/lb",  "color":"#3ab87a", "cssColor":"var(--nickel)",    "subLabel":"$/ton (×2204.623, after −0.15 adj)" },
-      { "key":"XCO",   "name":"Cobalt",      "unit":"USD/ton", "color":"#4a7fd4", "cssColor":"var(--cobalt)",    "subLabel":"$/lb (÷2204.623)" },
-      { "key":"BRL",   "name":"USD/BRL",     "unit":"BRL/USD", "color":"#5ab83a", "cssColor":"var(--brl)",       "subLabel":null },
-      { "key":"BRENT", "name":"Brent Crude", "unit":"USD/bbl", "color":"#c9822a", "cssColor":"var(--brent)",     "subLabel":null },
-      { "key":"WTI",   "name":"WTI Crude",   "unit":"USD/bbl", "color":"#bf6e20", "cssColor":"var(--wti)",       "subLabel":null },
-      { "key":"EUR",   "name":"EUR/USD",     "unit":"EUR/USD", "color":"#7b8fcc", "cssColor":"var(--eur)",       "subLabel":null },
-      { "key":"CAD",   "name":"USD/CAD",     "unit":"CAD/USD", "color":"#cc6b4a", "cssColor":"var(--cad)",       "subLabel":null }
+      {
+        "key": "XAU",
+        "name": "Gold",
+        "unit": "USD/oz",
+        "color": "#d4a43a",
+        "cssColor": "var(--gold)",
+        "subLabel": null
+      },
+      {
+        "key": "XAG",
+        "name": "Silver",
+        "unit": "USD/oz",
+        "color": "#a0aec0",
+        "cssColor": "var(--silver)",
+        "subLabel": null
+      },
+      {
+        "key": "XPT",
+        "name": "Platinum",
+        "unit": "USD/oz",
+        "color": "#94a3b8",
+        "cssColor": "var(--platinum)",
+        "subLabel": null
+      },
+      {
+        "key": "XPD",
+        "name": "Palladium",
+        "unit": "USD/oz",
+        "color": "#4db8d4",
+        "cssColor": "var(--palladium)",
+        "subLabel": null
+      },
+      {
+        "key": "XCU",
+        "name": "Copper",
+        "unit": "USD/lb",
+        "color": "#d4773a",
+        "cssColor": "var(--copper)",
+        "subLabel": "$/ton (×2204.623, after −0.15 adj)"
+      },
+      {
+        "key": "NI",
+        "name": "Nickel",
+        "unit": "USD/lb",
+        "color": "#3ab87a",
+        "cssColor": "var(--nickel)",
+        "subLabel": "$/ton (×2204.623, after −0.15 adj)"
+      },
+      {
+        "key": "XCO",
+        "name": "Cobalt",
+        "unit": "USD/ton",
+        "color": "#4a7fd4",
+        "cssColor": "var(--cobalt)",
+        "subLabel": "$/lb (÷2204.623)"
+      },
+      {
+        "key": "BRL",
+        "name": "USD/BRL",
+        "unit": "BRL/USD",
+        "color": "#5ab83a",
+        "cssColor": "var(--brl)",
+        "subLabel": null
+      },
+      {
+        "key": "BRENT",
+        "name": "Brent Crude",
+        "unit": "USD/bbl",
+        "color": "#c9822a",
+        "cssColor": "var(--brent)",
+        "subLabel": null
+      },
+      {
+        "key": "WTI",
+        "name": "WTI Crude",
+        "unit": "USD/bbl",
+        "color": "#bf6e20",
+        "cssColor": "var(--wti)",
+        "subLabel": null
+      },
+      {
+        "key": "EUR",
+        "name": "EUR/USD",
+        "unit": "EUR/USD",
+        "color": "#7b8fcc",
+        "cssColor": "var(--eur)",
+        "subLabel": null
+      },
+      {
+        "key": "CAD",
+        "name": "USD/CAD",
+        "unit": "CAD/USD",
+        "color": "#cc6b4a",
+        "cssColor": "var(--cad)",
+        "subLabel": null
+      }
     ]
   },
 
   "addingNewSymbol": {
     "checklist": [
-      "1. Verify symbol on metalpriceapi (GET /latest?currencies=SYMBOL) — check it returns data on current plan",
+      "1. Verify symbol on metalpriceapi (GET /latest?currencies=SYMBOL) — check it returns data on Basic plan",
       "2. Decide conversion type: FX (direct rate), OIL (1/rate = $/barrel), or metal (1/rate → oz → gram → target unit)",
       "3. src/server.ts — add to TRACKED array: [\"SYMBOL\", \"routename\"]",
       "4. src/server.ts — add to appropriate Set (PRECIOUS / OIL / FX) OR add explicit case in refreshSymbolCache, refreshAllSymbols, ingestChunk, getDisplayValue",
@@ -199,7 +408,7 @@
 
   "addingNewRoute": {
     "note": "Add routes BEFORE app.use(express.static(...)) to avoid static handler intercepting /api/* paths",
-    "ready_guard": "All /api handlers are guarded by the app.use('/api', ...) middleware that awaits the ready promise",
+    "readyGate": "All /api handlers are guarded by the app.use('/api', ...) middleware that awaits the ready promise; returns 503+Retry-After if caches AND timeseries are both empty",
     "pattern": "app.get('/api/foo', async (req, res) => { ... })"
   },
 
@@ -211,24 +420,141 @@
   },
 
   "knownGotchas": [
-    "border shorthand + borderLeft: use borderTop/Right/Bottom individually to avoid CSS transition bug on left accent bar",
-    "pubDate from NewsData.io is 'YYYY-MM-DD HH:MM:SS' with no timezone — must append 'T' and 'Z' before Date.parse()",
-    "pubDate from RSS feeds is RFC 2822 — Date.parse() handles correctly without transformation",
-    "canvas Sparkline: call paint() synchronously first; ResizeObserver should only repaint on genuine canvas.width changes to avoid double-fire cancellation loop",
-    "metalpriceapi rates are unitsPerUsd (inverted) — always compute displayValue as 1/rate for price assets",
-    "XCU and NI display values have a -0.15/lb visual adjustment applied in fmt() and subLabel()",
-    "ESM project (type:module) — all imports must use .js extension in TypeScript source",
-    "RegExpMatchArray[n] and RegExpExecArray[n] are string|undefined under noUncheckedIndexedAccess — use ?? '' guards",
-    "tweaks-panel.jsx loaded as second babel script — all exports attached to window via Object.assign"
+    "Cloud Run filesystem is ephemeral tmpfs — data/timeseries.json writes/reads work but vanish on every container restart. The seed re-runs on every cold start. Real persistence (GCS bucket via gcsfuse, or Firestore) is the remaining audit #1 fix.",
+    "AbortSignal.timeout in undici (Node fetch) can silently miss the response stream phase — a hung fetch never aborts. Mitigated by Promise.race against a manual 30s timer in coalesceRefresh.",
+    "fetchTimeframe must have a generous timeout (60s) — Cloud Run southamerica-east1 → metalpriceapi consistently exceeds 8s with 12 symbols × 365 days payload. Original 8s timeout (commit 026a2cb) silently broke the seed for 5 days.",
+    "Seed chunks need per-chunk try/catch — a single failing chunk (network blip, !res.ok) would otherwise propagate to the outer try/catch, leaving seedComplete=false and zero historical data.",
+    "border shorthand + borderLeft: use borderTop/Right/Bottom individually to avoid CSS transition bug on left accent bar (the shorthand briefly overrides border-left-color, transition fires on intermediate value).",
+    "pubDate from NewsData.io is 'YYYY-MM-DD HH:MM:SS' with no timezone — must append 'T' and 'Z' before Date.parse() or articles show 3h stale on UTC-3 machines.",
+    "pubDate from RSS feeds is RFC 2822 — Date.parse() handles correctly without transformation.",
+    "RSS feed UA must look like a browser — bot-shaped UAs (e.g. 'DashBot/1.0') get 403 from CNBC and likely others on Cloud Run IPs.",
+    "RSS HTML entities: &apos; &amp; &rsquo; &#8217; etc. must be decoded before rendering — JSX does not auto-decode string entities.",
+    "canvas Sparkline: call paint() synchronously first; ResizeObserver should only repaint on genuine canvas.width changes to avoid double-fire cancellation loop.",
+    "metalpriceapi rates are unitsPerUsd (inverted) — always compute displayValue as 1/rate for price assets.",
+    "XCU and NI display values have a -0.15/lb visual adjustment applied in fmt() and subLabel().",
+    "ESM project (type:module) — all imports must use .js extension in TypeScript source.",
+    "RegExpMatchArray[n] and RegExpExecArray[n] are string|undefined under noUncheckedIndexedAccess — use ?? '' guards.",
+    "tweaks-panel.jsx loaded as second babel script — all exports attached to window via Object.assign.",
+    "/api/refresh clears caches before refetching — if upstream is slow, the gate will 503 between the clear and the refill. Mostly a debug-endpoint concern since the frontend button was removed."
   ],
 
   "deployment": {
     "trigger": "push to main branch",
-    "workflow": ".github/workflows/deploy.yml",
+    "workflow": ".github/workflows/deploy-cloud-run.yml",
     "registry": "southamerica-east1-docker.pkg.dev/hip-principle-473317-j4/dashboard-repo/dashboard",
     "service": "dashboard",
     "region": "southamerica-east1",
-    "secrets": ["GCP_SA_KEY_JSON", "METALPRICE_API_KEY", "NEWS_API_KEY"],
-    "envVarsAtDeploy": ["METALPRICE_API_KEY", "METALPRICE_API_BASE", "METALPRICE_PLAN", "NEWS_API_KEY"]
-  }
+    "runtimeSA": "1056503697671-compute@developer.gserviceaccount.com",
+    "deployFlags": [
+      "--allow-unauthenticated",
+      "--min-instances 1 (keeps container warm; eliminates cold-start blank-chart window)",
+      "--update-env-vars (preserves manually-set env vars; replaces --set-env-vars which wiped them)"
+    ],
+    "secrets": [
+      "GCP_SA_KEY_JSON",
+      "METALPRICE_API_KEY",
+      "NEWS_API_KEY",
+      "REFRESH_TOKEN (optional)",
+      "CORS_ALLOW_ORIGINS (optional)"
+    ],
+    "envVarsAtDeploy": [
+      "METALPRICE_API_KEY",
+      "METALPRICE_API_BASE",
+      "METALPRICE_PLAN=basic",
+      "METALPRICE_REFRESH_MINUTES=5",
+      "NEWS_API_KEY",
+      "REFRESH_TOKEN (if set)",
+      "CORS_ALLOW_ORIGINS (if set)"
+    ],
+    "productionUrl": "https://dashboard-1056503697671.southamerica-east1.run.app"
+  },
+
+  "observability": {
+    "healthEndpoint": "GET /health (no auth) — comprehensive runtime state: uptime, cache state, seed state, refresh history, data depth, total failed chunks",
+    "structuredLogs": "Errors emitted as JSON.stringify({severity, component, ...fields}) to stderr — Cloud Logging picks up severity field automatically",
+    "logComponents": [
+      "initial_refresh",
+      "periodic_refresh",
+      "seed_chunk",
+      "seed"
+    ],
+    "metricsToWatch": [
+      "refresh.lastRefreshError — non-null means latest periodic refresh failed",
+      "refresh.msSinceLastSuccess — if > intervalMs*3, refresh is stuck",
+      "data.totalFailedChunks — running count of failed seed chunks since last restart",
+      "data.newestPoint vs current time — staleness indicator",
+      "cachedSymbols < 12 — partial cache, some symbol fetch failed"
+    ]
+  },
+
+  "outstandingAuditItems": [
+    {
+      "id": "#1",
+      "severity": "high",
+      "issue": "Cloud Run tmpfs is ephemeral — data/timeseries.json effectively unwritten. Every container restart re-seeds. Fix: GCS bucket via gcsfuse mount or migrate storage.ts to Firestore."
+    },
+    {
+      "id": "#3-partial",
+      "severity": "low",
+      "issue": "Periodic refresh now retries on failure; could add exponential backoff instead of fixed 60s."
+    },
+    {
+      "id": "#8",
+      "severity": "medium",
+      "issue": "SIGTERM persist flush has no timeout vs Cloud Run's 10s grace — only matters when #1 is fixed to use real persistence."
+    },
+    {
+      "id": "#10",
+      "severity": "low",
+      "issue": "hydrateTimeseries fs read isn't bounded — if disk grows, slow hydrate could fail Cloud Run readiness probe."
+    },
+    {
+      "id": "#11",
+      "severity": "low",
+      "issue": "Frontend fetch calls have no AbortController for unmount — cosmetic React warnings if App is ever wrapped in a router."
+    }
+  ],
+
+  "resolvedAuditItems": [
+    {
+      "id": "#2",
+      "resolved": "2026-05-26",
+      "fix": "Switched deploy to --update-env-vars; wired REFRESH_TOKEN + CORS_ALLOW_ORIGINS through workflow."
+    },
+    {
+      "id": "#3",
+      "resolved": "2026-05-26",
+      "fix": "Replaced setInterval with self-rescheduling setTimeout that retries after 60s on failure."
+    },
+    {
+      "id": "#4",
+      "resolved": "2026-05-26",
+      "fix": "fetchLatest/fetchChange bumped to 20s, fetchTimeframe to 60s, plus Promise.race manual timer guard."
+    },
+    {
+      "id": "#5",
+      "resolved": "2026-05-26",
+      "fix": "Removed user-initiated refresh button from frontend."
+    },
+    {
+      "id": "#6",
+      "resolved": "2026-05-26",
+      "fix": "Per-chunk try/catch in seed loop; track failedChunks; warn on completion with gaps."
+    },
+    {
+      "id": "#7",
+      "resolved": "2026-05-26",
+      "fix": "/api gate now 503+Retry-After when caches AND timeseries both empty (relaxed from caches-only)."
+    },
+    {
+      "id": "#9",
+      "resolved": "2026-05-26",
+      "fix": "Removed alongside #5 — frontend no longer calls /api/refresh."
+    },
+    {
+      "id": "#12",
+      "resolved": "2026-05-26",
+      "fix": "seedComplete=true in outer catch so UI seedPending flag doesn't hang."
+    }
+  ]
 }
