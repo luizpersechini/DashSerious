@@ -92,7 +92,10 @@ export class MetalpriceClient {
         "Content-Type": "application/json",
         "X-API-KEY": this.apiKey,
       },
-      signal: AbortSignal.timeout(8000),
+      // Heavier endpoint (up to 365d × 12 symbols payload). Cloud Run egress
+      // from southamerica-east1 routinely exceeds 8s — bump to 60s so seed
+      // chunks don't silently AbortError.
+      signal: AbortSignal.timeout(60000),
     });
     if (!res.ok) {
       throw new Error(`metalprice timeframe failed: ${res.status}`);
