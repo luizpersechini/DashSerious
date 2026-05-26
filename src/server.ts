@@ -106,10 +106,21 @@ function mergeNews(
 }
 
 // Single in-flight refresh guard: collapses concurrent /latest cache-miss paths into one upstream call.
+// Wraps refreshAllSymbols in a hard timeout via Promise.race because AbortSignal.timeout in undici
+// occasionally misses the response stream phase — without this guard a hung fetch wedges the
+// singleton forever and every subsequent refresh returns the same dead promise (May 26 observed).
+const COALESCE_HARD_TIMEOUT_MS = 30_000;
 let inFlightRefresh: Promise<void> | null = null;
 function coalesceRefresh(): Promise<void> {
   if (!inFlightRefresh) {
-    inFlightRefresh = refreshAllSymbols().finally(() => {
+    const work = refreshAllSymbols();
+    const guard = new Promise<void>((_, reject) => {
+      setTimeout(
+        () => reject(new Error("coalesceRefresh hard timeout (30s)")),
+        COALESCE_HARD_TIMEOUT_MS,
+      ).unref();
+    });
+    inFlightRefresh = Promise.race([work, guard]).finally(() => {
       inFlightRefresh = null;
     });
   }
@@ -400,17 +411,18 @@ const TRACKED: Array<[string, string]> = [
 
 const NAME_TO_SYMBOL = new Map<string, string>(TRACKED.map(([s, n]) => [n, s]));
 
-// Readiness gate (audit #7): wait for the bounded `ready` promise, then return
-// 503 + Retry-After if the cache is still empty (e.g., first refresh failed)
-// instead of letting handlers serve empty data. Frontend should display a
-// warming-up state on 503.
+// Readiness gate (audit #7): wait for the bounded `ready` promise, then only
+// 503 if we have NO data at all (cache empty AND timeseries empty). If we
+// have historical data, serve it even with a cold live cache — stale prices
+// are better than blank charts. Specific symbol routes can still surface
+// staleness via their own checks.
 app.use("/api", async (_req, res, next) => {
   try {
     await ready;
   } catch {
-    /* swallowed below by cache check */
+    /* swallowed below by data check */
   }
-  if (caches.size === 0) {
+  if (caches.size === 0 && timeseriesBySymbol.size === 0) {
     res.setHeader("Retry-After", "5");
     return res.status(503).json({
       success: false,
