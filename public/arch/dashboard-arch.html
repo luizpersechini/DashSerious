@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DashSerious — Architecture</title>
+<style>
+  :root {
+    --bg:     #0e0e10;
+    --surface:#161618;
+    --border: #2a2a2e;
+    --text:   #e8e8ec;
+    --muted:  #7a7a82;
+    --dim:    #44444c;
+    --gold:   #d4a43a; --silver:#a0aec0; --platinum:#94a3b8; --palladium:#4db8d4;
+    --copper: #d4773a; --nickel:#3ab87a; --cobalt:#4a7fd4;
+    --brl:    #5ab83a; --brent:#c9822a; --wti:#bf6e20;
+    --eur:    #7b8fcc; --cad:#cc6b4a;
+    --mono:   'DM Mono','Courier New',monospace;
+    --sans:   system-ui,sans-serif;
+    --green:  #3ab87a; --red:#e05c5c; --blue:#4db8d4; --purple:#9b7fd4;
+  }
+  * { box-sizing:border-box; margin:0; padding:0 }
+  body { background:var(--bg); color:var(--text); font-family:var(--sans); font-size:13px; line-height:1.6 }
+  h1 { font-family:var(--mono); font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); font-weight:400 }
+  h2 { font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:400; margin-bottom:14px }
+  h3 { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); font-weight:400; margin-bottom:8px }
+  a  { color:var(--blue); text-decoration:none }
+
+  .page { max-width:1400px; margin:0 auto; padding:32px 24px 80px }
+
+  /* ── HEADER ── */
+  .header { display:flex; align-items:baseline; gap:16px; margin-bottom:40px; padding-bottom:16px; border-bottom:1px solid var(--border) }
+  .brand  { font-family:var(--mono); font-size:16px; letter-spacing:.12em; text-transform:uppercase; color:var(--text) }
+  .brand-sub { font-family:var(--mono); font-size:10px; color:var(--muted); margin-left:auto }
+
+  /* ── CARDS ── */
+  .card { background:var(--surface); border:1px solid var(--border); padding:20px 24px; margin-bottom:16px }
+  .card-grid { display:grid; gap:16px }
+  .card-grid-2 { grid-template-columns:1fr 1fr }
+  .card-grid-3 { grid-template-columns:1fr 1fr 1fr }
+  .card-grid-4 { grid-template-columns:repeat(4,1fr) }
+  @media (max-width:900px) { .card-grid-2,.card-grid-3,.card-grid-4 { grid-template-columns:1fr } }
+
+  /* ── SECTION ── */
+  .section { margin-bottom:48px }
+  .section-label { font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); margin-bottom:20px; padding-bottom:8px; border-bottom:1px solid var(--border) }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow { display:flex; align-items:center; gap:0; flex-wrap:wrap; margin:12px 0 }
+  .flow-node { background:var(--surface); border:1px solid var(--border); padding:6px 12px; font-family:var(--mono); font-size:10px; letter-spacing:.06em; white-space:nowrap }
+  .flow-arrow { color:var(--dim); padding:0 6px; font-size:14px }
+  .flow-node.api    { border-color:var(--blue);   color:var(--blue) }
+  .flow-node.server { border-color:var(--purple); color:var(--purple) }
+  .flow-node.cache  { border-color:var(--gold);   color:var(--gold) }
+  .flow-node.disk   { border-color:var(--dim) }
+  .flow-node.fe     { border-color:var(--green);  color:var(--green) }
+  .flow-node.rss    { border-color:var(--copper); color:var(--copper) }
+
+  /* ── TABLES ── */
+  table { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:11px }
+  th { text-align:left; color:var(--muted); font-weight:400; font-size:10px; letter-spacing:.08em; text-transform:uppercase; padding:6px 10px; border-bottom:1px solid var(--border) }
+  td { padding:6px 10px; border-bottom:1px solid var(--border); vertical-align:top }
+  tr:last-child td { border-bottom:none }
+  td.key  { color:var(--blue); white-space:nowrap }
+  td.muted { color:var(--muted) }
+  td.green { color:var(--green) }
+  td.red   { color:var(--red) }
+  td.gold  { color:var(--gold) }
+
+  /* ── CODE ── */
+  code { font-family:var(--mono); font-size:10px; background:#1a1a1e; padding:2px 6px; color:var(--text) }
+  pre  { font-family:var(--mono); font-size:10px; background:#1a1a1e; padding:14px 16px; overflow-x:auto; color:var(--text); line-height:1.7 }
+
+  /* ── TAGS / CHIPS ── */
+  .chip { display:inline-block; font-family:var(--mono); font-size:9px; letter-spacing:.08em; text-transform:uppercase; padding:2px 7px; border:1px solid; margin:2px }
+  .chip-blue   { border-color:var(--blue);   color:var(--blue) }
+  .chip-green  { border-color:var(--green);  color:var(--green) }
+  .chip-gold   { border-color:var(--gold);   color:var(--gold) }
+  .chip-purple { border-color:var(--purple); color:var(--purple) }
+  .chip-copper { border-color:var(--copper); color:var(--copper) }
+  .chip-red    { border-color:var(--red);    color:var(--red) }
+  .chip-dim    { border-color:var(--dim);    color:var(--muted) }
+
+  /* ── SYMBOL DOTS ── */
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle }
+
+  /* ── COMPONENT TREE ── */
+  .tree { font-family:var(--mono); font-size:11px; line-height:1.9 }
+  .tree-line { padding-left:0 }
+  .tree-indent-1 { padding-left:20px }
+  .tree-indent-2 { padding-left:40px }
+  .tree-indent-3 { padding-left:60px }
+  .tree .comp  { color:var(--blue) }
+  .tree .prop  { color:var(--muted); font-size:10px }
+  .tree .note  { color:var(--green); font-size:10px }
+
+  /* ── ROUTE BADGES ── */
+  .method { font-family:var(--mono); font-size:9px; padding:1px 5px; letter-spacing:.06em; text-transform:uppercase; display:inline-block; margin-right:6px }
+  .GET    { background:#1a2e1a; color:var(--green); border:1px solid #2a4a2a }
+  .POST   { background:#2a1a1a; color:var(--red);   border:1px solid #4a2a2a }
+
+  /* ── HIGHLIGHT BOX ── */
+  .highlight { background:#1a1c1e; border-left:3px solid var(--blue); padding:12px 16px; margin:12px 0; font-family:var(--mono); font-size:10px; line-height:1.8 }
+  .highlight.warn { border-left-color:var(--gold) }
+  .highlight.danger { border-left-color:var(--red) }
+
+  /* ── SYMBOL SWATCHES ── */
+  .symbol-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:8px }
+  @media (max-width:900px) { .symbol-grid { grid-template-columns:repeat(3,1fr) } }
+  .symbol-swatch { border:1px solid var(--border); padding:10px 12px }
+  .symbol-key    { font-family:var(--mono); font-size:12px; font-weight:600 }
+  .symbol-name   { font-family:var(--mono); font-size:9px; color:var(--muted); margin-top:2px }
+  .symbol-unit   { font-family:var(--mono); font-size:9px; color:var(--dim); margin-top:4px }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="brand">DashSerious</div>
+    <h1>Architecture Map</h1>
+    <div class="brand-sub">v1.2.4 · 2026-05-12 · Node 20 / Express 5 / React 18</div>
+  </div>
+
+  <!-- ── SYSTEM OVERVIEW ── -->
+  <div class="section">
+    <div class="section-label">System Overview</div>
+    <div class="card">
+      <div style="margin-bottom:20px">
+        <div class="flow">
+          <div class="flow-node api">metalpriceapi.com</div><div class="flow-arrow">→</div>
+          <div class="flow-node server">MetalpriceClient</div><div class="flow-arrow">→</div>
+          <div class="flow-node cache">in-memory Map&lt;sym,cache&gt;</div><div class="flow-arrow">→</div>
+          <div class="flow-node disk">data/timeseries.json</div>
+        </div>
+        <div class="flow" style="margin-top:8px">
+          <div class="flow-node rss">Kitco / Mining.com / CNBC RSS</div><div class="flow-arrow">→</div>
+          <div class="flow-node api">newsdata.io (optional)</div><div class="flow-arrow">→</div>
+          <div class="flow-node server">newsClient.ts</div><div class="flow-arrow">→</div>
+          <div class="flow-node cache">NewsCache (30min)</div>
+        </div>
+        <div class="flow" style="margin-top:8px">
+          <div class="flow-node server">Express 5 /api/*</div><div class="flow-arrow">→</div>
+          <div class="flow-node fe">public/index.html</div><div class="flow-arrow">→</div>
+          <div class="flow-node fe">React 18 + Babel (no build)</div>
+        </div>
+      </div>
+      <table>
+        <tr><th>Layer</th><th>Technology</th><th>Key file</th></tr>
+        <tr><td>HTTP server</td><td>Express 5.1, Node 20, ESM</td><td><code>src/server.ts</code></td></tr>
+        <tr><td>Price API client</td><td>native fetch, metalpriceapi.com</td><td><code>src/metalpriceClient.ts</code></td></tr>
+        <tr><td>News pipeline</td><td>native fetch, RSS parser (regex), newsdata.io</td><td><code>src/newsClient.ts</code></td></tr>
+        <tr><td>Persistence</td><td>JSON on disk, atomic .tmp→rename</td><td><code>src/storage.ts</code></td></tr>
+        <tr><td>Config</td><td>hand-rolled .env parser (no dotenv dep)</td><td><code>src/config.ts</code></td></tr>
+        <tr><td>Frontend</td><td>React 18.3 + Babel standalone (single HTML, no build)</td><td><code>public/index.html</code></td></tr>
+        <tr><td>Dev panel</td><td>postMessage protocol, draggable, tweaks persisted via hook</td><td><code>public/tweaks-panel.jsx</code></td></tr>
+        <tr><td>Deploy</td><td>Docker → GCP Artifact Registry → Cloud Run (southamerica-east1)</td><td><code>.github/workflows/deploy.yml</code></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── TRACKED SYMBOLS ── -->
+  <div class="section">
+    <div class="section-label">Tracked Symbols (12)</div>
+    <div class="symbol-grid">
+      <div class="symbol-swatch" style="border-left:3px solid var(--gold)">
+        <div class="symbol-key" style="color:var(--gold)">XAU</div>
+        <div class="symbol-name">Gold</div>
+        <div class="symbol-unit">USD/oz · troy</div>
+      </div>
+      <div class="symbol-swatch" style="border-left:3px solid var(--silver)">
+        <div class="symbol-key" style="color:var(--silver)">XAG</div>
+        <div class="symbol-name">Silver</div>
+        <div class="symbol-unit">USD/oz · troy</div>
+      </div>
+      <div class="symbol-swatch" style="border-left:3px solid var(--platinum)">
+        <div class="symbol-key" style="color:var(--platinum)">XPT</div>
+        <div class="symbol-name">Platinum</div>
+        <div class="symbol-unit">USD/oz · troy</div>
+      </div>
+      <div class="symbol-swatch" style="border-left:3px solid var(--palladium)">
+        <div class="symbol-key" style="color:var(--palladium)">XPD</div>
+        <div class="symbol-name">Palladium</div>
+        <div class="symbol-unit">USD/oz · troy</div>
+      </div>
+      <div class="symbol-swatch" style="border-left:3px solid var(--copper)">
+        <div class="symbol-key" style="color:var(--copper)">XCU</div>
+        <div class="symbol-name">Copper</div>
+        <div class="symbol-unit">USD/lb − 0.15 adj<br>subLabel: $/ton</div>
+      </div>
+      <div class="symbol-swatch" style="border-left:3px solid var(--nickel)">
+        <div class="symbol-key" style="color:var(--nickel)">NI</div>
+        <div class="symbol-name">Nickel</div>
+        <div class="symbol-unit">USD/lb − 0.15 adj<br>subLabel: $/ton</div>
+      </div>
+      <div class="symbol-swatch" style="border-left:3px solid var(--cobalt)">
+        <div class="symbol-key" style="color:var(--cobalt)">XCO</div>
+        <div class="symbol-name">Cobalt</div>
+        <div class="symbol-unit">USD/ton<br>subLabel: $/lb</div>
+      </div>
+      <div class="symbol-swatch" style="border-left:3px solid var(--brl)">
+        <div class="symbol-key" style="color:var(--brl)">BRL</div>
+        <div class="symbol-name">USD/BRL</div>
+        <div class="symbol-unit">BRL per USD (direct)</div>
+      </div>
+      <div class="symbol-swatch" style="border-left:3px solid var(--brent)">
+        <div class="symbol-key" style="color:var(--brent)">BRENT</div>
+        <div class="symbol-name">Brent Crude</div>
+        <div class="symbol-unit">USD/bbl = 1/rate</div>
+      </div>
+      <div class="symbol-swatch" style="border-left:3px solid var(--wti)">
+        <div class="symbol-key" style="color:var(--wti)">WTI</div>
+        <div class="symbol-name">WTI Crude</div>
+        <div class="symbol-unit">USD/bbl = 1/rate</div>
+      </div>
+      <div class="symbol-swatch" style="border-left:3px solid var(--eur)">
+        <div class="symbol-key" style="color:var(--eur)">EUR</div>
+        <div class="symbol-name">EUR/USD</div>
+        <div class="symbol-unit">EUR per USD (direct)</div>
+      </div>
+      <div class="symbol-swatch" style="border-left:3px solid var(--cad)">
+        <div class="symbol-key" style="color:var(--cad)">CAD</div>
+        <div class="symbol-name">USD/CAD</div>
+        <div class="symbol-unit">CAD per USD (direct)</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>Conversion Math</h2>
+      <pre>API rate format: unitsPerUSD  (e.g. 0.000213 oz/USD for gold)
+
+PRECIOUS  (XAU XAG XPT XPD):  usdPerOunce = 1/rate  [troy oz: ÷31.1034768]
+INDUSTRIAL (XCU NI):           usdPerOunce = 1/rate  [avdp oz: ÷28.349523]
+                                → usdPerPound = usdPerGram × 453.59237
+XCO:                           same industrial chain
+                                → usdPerMetricTon = usdPerGram × 1_000_000
+OIL (BRENT WTI):               usdPerBarrel = 1/rate  (direct, no gram step)
+FX  (BRL EUR CAD):             fxUsdXxx = rate  (direct exchange rate)</pre>
+
+      <h2 style="margin-top:16px">Display Adjustments</h2>
+      <div class="highlight warn">
+        XCU and NI: <code>fmt(v) = $(v - 0.15).toFixed(2)</code>  — 15¢/lb visual reduction applied before display.<br>
+        Also propagated into subLabel: <code>Math.round((v - 0.15) × 2204.623)</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SERVER ROUTES ── -->
+  <div class="section">
+    <div class="section-label">Express Routes</div>
+    <div class="card">
+      <table>
+        <tr><th>Method</th><th>Path</th><th>Returns</th><th>Notes</th></tr>
+        <tr>
+          <td><span class="method GET">GET</span></td>
+          <td><code>/api/metal/:name/latest</code></td>
+          <td class="muted"><code>{ success, data: MetalCache }</code></td>
+          <td class="muted">ETag + Cache-Control:30s</td>
+        </tr>
+        <tr>
+          <td><span class="method GET">GET</span></td>
+          <td><code>/api/metal/:name/timeseries</code></td>
+          <td class="muted"><code>{ success, data: { points, seedPending } }</code></td>
+          <td class="muted">?since_ts or ?limit</td>
+        </tr>
+        <tr>
+          <td><span class="method GET">GET</span></td>
+          <td><code>/api/metal/:name/change</code></td>
+          <td class="muted">proxied fetchChange()</td>
+          <td class="muted">?date_type=recent|yesterday|week|month|year</td>
+        </tr>
+        <tr>
+          <td><span class="method GET">GET</span></td>
+          <td><code>/api/allmetals/timeseries</code></td>
+          <td class="muted"><code>{ success, symbols: { [sym]: [{t,v}] } }</code></td>
+          <td class="muted">All 12 symbols in one call. ?limit=N. <strong>Used by frontend.</strong></td>
+        </tr>
+        <tr>
+          <td><span class="method POST">POST</span></td>
+          <td><code>/api/refresh</code></td>
+          <td class="muted"><code>{ success, message }</code></td>
+          <td class="muted">Clears caches, re-fetches all symbols immediately</td>
+        </tr>
+        <tr>
+          <td><span class="method GET">GET</span></td>
+          <td><code>/api/news</code></td>
+          <td class="muted"><code>{ items: NewsItem[], configured, stale? }</code></td>
+          <td class="muted">30-min server cache. Works without NEWS_API_KEY (RSS only).</td>
+        </tr>
+        <tr>
+          <td><span class="method GET">GET</span></td>
+          <td><code>/api/version</code></td>
+          <td class="muted"><code>{ version }</code></td>
+          <td class="muted">Cached 1h</td>
+        </tr>
+        <tr>
+          <td><span class="method GET">GET</span></td>
+          <td><code>/health</code></td>
+          <td class="muted"><code>{ ok, cacheWarm, cachedSymbols, seedComplete, uptimeMs }</code></td>
+          <td class="muted">Not under /api — no ready guard</td>
+        </tr>
+        <tr>
+          <td><span class="method GET">GET</span></td>
+          <td><code>/api/{name}/latest</code> etc.</td>
+          <td class="muted">Same as :name routes</td>
+          <td class="muted">Backward-compat per-name aliases for all 12 symbols</td>
+        </tr>
+      </table>
+      <div class="highlight" style="margin-top:12px">
+        All <code>/api/*</code> routes are blocked by <code>app.use('/api', await ready)</code> until the first refresh completes (or 10s timeout).
+        New routes must be added <strong>before</strong> <code>app.use(express.static(...))</code>.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SERVER DATA FLOW ── -->
+  <div class="section">
+    <div class="section-label">Server Data Pipeline</div>
+    <div class="card-grid card-grid-2">
+      <div class="card">
+        <h2>Price Pipeline</h2>
+        <div class="flow" style="flex-direction:column; align-items:flex-start; gap:6px">
+          <div class="flow-node api">startup → coalesceRefresh()</div>
+          <div style="color:var(--dim);padding-left:12px;font-family:var(--mono);font-size:10px">↓ fetchLatest(all 12 symbols)</div>
+          <div class="flow-node server">refreshAllSymbols()</div>
+          <div style="color:var(--dim);padding-left:12px;font-family:var(--mono);font-size:10px">↓ per-symbol conversion math</div>
+          <div class="flow-node cache">caches Map&lt;sym, MetalCache&gt;</div>
+          <div style="color:var(--dim);padding-left:12px;font-family:var(--mono);font-size:10px">↓ getDisplayValue() → append point</div>
+          <div class="flow-node cache">timeseriesBySymbol Map&lt;sym, [{t,v}]&gt;</div>
+          <div style="color:var(--dim);padding-left:12px;font-family:var(--mono);font-size:10px">↓ every 5min</div>
+          <div class="flow-node disk">data/timeseries.json</div>
+        </div>
+        <div class="highlight" style="margin-top:12px">
+          Refresh interval by plan:<br>
+          essential=30min · basic=10min · professional=60s · proplus=30s · business=15s
+        </div>
+      </div>
+      <div class="card">
+        <h2>Startup Seed</h2>
+        <pre style="font-size:10px">seedHistory() IIFE:
+  SEED_DEPTH_DAYS = 1825 (5 years)
+  CHUNK_DAYS = 365 (API max window)
+
+  1. hydrateTimeseries(disk → memory)
+  2. Compute oldest/newest in-memory
+  3. Build date ranges to fill gaps:
+     – backfill (older missing data)
+     – top-up (newer missing data)
+  4. For each range:
+     fetchTimeframe(start, end, all syms)
+     → ingestChunk(rates)
+     → append to timeseriesBySymbol
+     500ms delay between chunks
+  5. seedComplete = true</pre>
+        <div class="highlight warn" style="margin-top:12px">
+          ingestChunk applies the same conversion math per symbol type (OIL / FX / metal).
+          New symbol types must be added to BOTH refreshAllSymbols AND ingestChunk.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FRONTEND COMPONENTS ── -->
+  <div class="section">
+    <div class="section-label">Frontend Component Tree</div>
+    <div class="card-grid card-grid-2">
+      <div class="card">
+        <h2>React Tree</h2>
+        <div class="tree">
+          <div class="tree-line"><span class="comp">App</span> <span class="prop">— root, all state, data fetching</span></div>
+          <div class="tree-indent-1"><span class="comp">Header</span> <span class="prop">brand · date · refresh · version</span></div>
+          <div class="tree-indent-1"><span class="comp">TickerTape</span> <span class="prop">all 12 prices + % change</span></div>
+          <div class="tree-indent-1"><span class="comp">TimeframeSelector</span> <span class="prop">1D/5D/30D/90D/1Y/3Y/ALL</span></div>
+          <div class="tree-indent-1 note">— editorial layout —</div>
+          <div class="tree-indent-1"><span class="comp">HeroCard</span> <span class="prop">default: NI; large 2-col grid</span></div>
+          <div class="tree-indent-2"><span class="comp">Sparkline</span> <span class="prop">canvas, animated, DPR-aware</span></div>
+          <div class="tree-indent-2"><span class="comp">ChangeBadge</span></div>
+          <div class="tree-indent-1"><span class="comp">SectionLabel</span> <span class="prop">"PRECIOUS METALS"</span></div>
+          <div class="tree-indent-1"><span class="comp">CompactCard</span> <span class="prop">×4 precious (minus hero)</span></div>
+          <div class="tree-indent-2"><span class="comp">Sparkline</span></div>
+          <div class="tree-indent-2"><span class="comp">ChangeBadge</span></div>
+          <div class="tree-indent-1"><span class="comp">SectionLabel</span> <span class="prop">"INDUSTRIAL &amp; FX"</span></div>
+          <div class="tree-indent-1"><span class="comp">CompactCard</span> <span class="prop">×8 industrial (ALL, even if hero)</span></div>
+          <div class="tree-indent-1"><span class="comp">NewsFeed</span></div>
+          <div class="tree-indent-2"><span class="comp">FilterChips</span></div>
+          <div class="tree-indent-2"><span class="comp">NewsCard</span> <span class="prop">×N articles</span></div>
+          <div class="tree-indent-1 note">— grid layout (alternate) —</div>
+          <div class="tree-indent-1"><span class="comp">CompactCard</span> <span class="prop">×12 flat grid</span></div>
+          <div class="tree-indent-1 note">— always present —</div>
+          <div class="tree-indent-1"><span class="comp">DetailPanel</span> <span class="prop">slide-in on card click</span></div>
+          <div class="tree-indent-2"><span class="comp">Sparkline</span> <span class="prop">full chart</span></div>
+          <div class="tree-indent-2"><span class="comp">ChangeBadge</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>App State</h2>
+        <table>
+          <tr><th>State</th><th>Type</th><th>Source</th></tr>
+          <tr><td class="key">rawData</td><td class="muted">allmetals response</td><td class="muted">GET /api/allmetals/timeseries?limit=2000</td></tr>
+          <tr><td class="key">timeframe</td><td class="muted">number (days)</td><td class="muted">user interaction; default 365</td></tr>
+          <tr><td class="key">tweaks</td><td class="muted">TweakDefaults</td><td class="muted">useTweaks() hook, postMessage protocol</td></tr>
+          <tr><td class="key">expandedKey</td><td class="muted">string|null</td><td class="muted">card click → DetailPanel</td></tr>
+          <tr><td class="key">newsData</td><td class="muted">NewsResponse</td><td class="muted">GET /api/news</td></tr>
+          <tr><td class="key">appVersion</td><td class="muted">string</td><td class="muted">GET /api/version</td></tr>
+          <tr><td class="key">lastUpdated</td><td class="muted">string</td><td class="muted">derived from rawData.symbols.XAU last point</td></tr>
+          <tr><td class="key">refreshing</td><td class="muted">bool</td><td class="muted">POST /api/refresh in flight</td></tr>
+        </table>
+
+        <h2 style="margin-top:16px">TWEAK_DEFAULTS</h2>
+        <pre>layout:      "editorial" | "grid"
+density:     "comfortable" | "compact"
+chartStyle:  "bar" | "area" | "line"
+showChange:  true | false
+heroMetal:   "NI" (any symbol key)
+colorScheme: "dark" | "light"</pre>
+
+        <h2 style="margin-top:16px">Layout Split</h2>
+        <pre>PRECIOUS_KEYS = ['XAU','XAG','XPT','XPD']
+industrial   = METALS.filter(m => !PRECIOUS_KEYS.includes(m.key))
+               → 8 items: XCU NI XCO BRL BRENT WTI EUR CAD
+preciousRest = METALS.filter(precious).filter(not hero)
+               → 3 items (one is hero)</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── NEWS PIPELINE ── -->
+  <div class="section">
+    <div class="section-label">News Pipeline</div>
+    <div class="card">
+      <div class="card-grid card-grid-3">
+        <div>
+          <h2>Sources</h2>
+          <table>
+            <tr><th>Source</th><th>Requires Key</th></tr>
+            <tr><td class="key">newsdata.io</td><td class="green">YES — NEWS_API_KEY</td></tr>
+            <tr><td class="key">Kitco RSS</td><td class="muted">no</td></tr>
+            <tr><td class="key">Mining.com RSS</td><td class="muted">no</td></tr>
+            <tr><td class="key">CNBC Commodities RSS</td><td class="muted">no</td></tr>
+          </table>
+        </div>
+        <div>
+          <h2>Processing</h2>
+          <pre style="font-size:10px">fetchNews(apiKey):
+  1. Parallel: 2 newsdata.io queries
+     (if apiKey set)
+  2. Parallel: 3 RSS fetches (always)
+  3. Map → NewsItem
+     · decodeEntities(title)
+     · decodeEntities(description)
+     · parsePubDate (auto-detects format)
+     · tagArticle (METAL_KEYWORDS match)
+  4. Dedupe by normalized title
+  5. Filter by RELEVANCE_TERMS
+  6. Sort by pubMs desc
+  7. Slice to 30 items</pre>
+        </div>
+        <div>
+          <h2>NewsItem Shape</h2>
+          <pre style="font-size:10px">id:          base64(link).slice(0,16)
+title:       string (entities decoded)
+description: string (200 char max)
+link:        string
+source:      string (source_id)
+pubDate:     string (original)
+pubMs:       number (UTC epoch ms)
+tags:        string[] (symbol keys)</pre>
+
+          <h2 style="margin-top:12px">pubDate Parsing</h2>
+          <pre style="font-size:10px">newsdata.io: "YYYY-MM-DD HH:MM:SS"
+→ replace ' ' with 'T', append 'Z'
+→ force UTC parse
+
+RSS: RFC 2822 (auto, no transform)</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── KEY PATTERNS ── -->
+  <div class="section">
+    <div class="section-label">Recipes</div>
+    <div class="card-grid card-grid-2">
+      <div class="card">
+        <h2>Add a New Symbol</h2>
+        <pre>1. Test on API:
+   curl ".../latest?api_key=KEY&currencies=SYM"
+
+2. Decide type:
+   FX?  → add to FX Set
+   Oil? → add to OIL Set
+   Metal? → add to PRECIOUS or handle explicitly
+
+3. src/server.ts:
+   TRACKED.push(["SYM", "routename"])
+   // if new type: add field to MetalCache
+   // add cases in:
+   //   refreshSymbolCache()
+   //   refreshAllSymbols()
+   //   ingestChunk()
+   //   getDisplayValue()
+
+4. public/index.html:
+   // :root → add --sym: oklch(...)
+   // METALS.push({
+   //   key:'SYM', name:'...', unit:'...',
+   //   color:'#hex', cssColor:'var(--sym)',
+   //   fmt: v => ...,
+   //   subLabel: v => ...  // optional
+   // })
+
+5. npx tsc --noEmit  ← always check</pre>
+      </div>
+      <div class="card">
+        <h2>Known Gotchas</h2>
+        <div class="highlight danger">
+          <strong>border + borderLeft hover bug</strong><br>
+          Never use <code>border</code> shorthand alongside <code>borderLeft</code> when there's a <code>transition: border-color</code>. Use <code>borderTop / borderRight / borderBottom</code> + <code>borderLeft</code> separately.
+        </div>
+        <div class="highlight warn" style="margin-top:8px">
+          <strong>pubDate timezone</strong><br>
+          newsdata.io returns "YYYY-MM-DD HH:MM:SS" with NO timezone. Must append "T" + "Z" before Date.parse() or articles show 3h stale on UTC-3 machines.
+        </div>
+        <div class="highlight" style="margin-top:8px">
+          <strong>Sparkline double-fire</strong><br>
+          Call <code>paint()</code> synchronously first. ResizeObserver should only re-trigger when <code>canvas.width !== Math.round(newW * dpr)</code>. Otherwise the two calls cancel each other's rAF mid-animation → blank canvas.
+        </div>
+        <div class="highlight" style="margin-top:8px">
+          <strong>noUncheckedIndexedAccess</strong><br>
+          <code>RegExpMatchArray[n]</code> is <code>string|undefined</code>. Always <code>?? ""</code> on regex capture groups.
+        </div>
+        <div class="highlight" style="margin-top:8px">
+          <strong>Static handler order</strong><br>
+          All <code>app.get/post('/api/...')</code> must be registered BEFORE <code>app.use(express.static(...))</code>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ENV VARS ── -->
+  <div class="section">
+    <div class="section-label">Environment Variables</div>
+    <div class="card">
+      <table>
+        <tr><th>Variable</th><th>Required</th><th>Default</th><th>Description</th></tr>
+        <tr><td class="key">METALPRICE_API_KEY</td><td class="red">yes</td><td class="muted">—</td><td>metalpriceapi.com key</td></tr>
+        <tr><td class="key">METALPRICE_API_BASE</td><td class="muted">no</td><td class="muted">https://api.metalpriceapi.com/v1</td><td></td></tr>
+        <tr><td class="key">METALPRICE_PLAN</td><td class="muted">no</td><td class="muted">essential</td><td>drives refresh interval: essential=30min basic=10min professional=60s proplus=30s business=15s</td></tr>
+        <tr><td class="key">METALPRICE_MONTHLY_QUOTA</td><td class="muted">no</td><td class="muted">1000</td><td>parsed but currently unused in logic</td></tr>
+        <tr><td class="key">METALPRICE_REFRESH_MINUTES</td><td class="muted">no</td><td class="muted">—</td><td>manual override for poll interval (overrides plan-based default)</td></tr>
+        <tr><td class="key">SEED_DEPTH_DAYS</td><td class="muted">no</td><td class="muted">1825</td><td>how many days of history to seed on cold start (5 years)</td></tr>
+        <tr><td class="key">NEWS_API_KEY</td><td class="muted">no</td><td class="muted">—</td><td>newsdata.io key; RSS feeds always run without it</td></tr>
+        <tr><td class="key">PORT</td><td class="muted">no</td><td class="muted">3000</td><td>HTTP listen port</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── DEPLOY ── -->
+  <div class="section">
+    <div class="section-label">Deployment</div>
+    <div class="card">
+      <div class="flow">
+        <div class="flow-node server">push to main</div><div class="flow-arrow">→</div>
+        <div class="flow-node server">GitHub Actions</div><div class="flow-arrow">→</div>
+        <div class="flow-node api">docker build</div><div class="flow-arrow">→</div>
+        <div class="flow-node api">push to Artifact Registry<br><small>southamerica-east1</small></div><div class="flow-arrow">→</div>
+        <div class="flow-node fe">gcloud run deploy<br><small>dashboard · southamerica-east1</small></div>
+      </div>
+      <table style="margin-top:16px">
+        <tr><th>Secret</th><th>Used by</th></tr>
+        <tr><td class="key">GCP_SA_KEY_JSON</td><td class="muted">google-github-actions/auth</td></tr>
+        <tr><td class="key">METALPRICE_API_KEY</td><td class="muted">passed as Cloud Run env var</td></tr>
+        <tr><td class="key">NEWS_API_KEY</td><td class="muted">passed as Cloud Run env var (optional)</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div style="text-align:center; font-family:var(--mono); font-size:9px; color:var(--dim); margin-top:40px">
+    DashSerious v1.2.4 · generated 2026-05-12 · arch/dashboard-arch.html
+  </div>
+
+</div>
+</body>
+</html>

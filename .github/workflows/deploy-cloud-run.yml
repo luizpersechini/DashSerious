@@ -59,7 +59,10 @@ jobs:
         env:
           METALPRICE_API_KEY: ${{ secrets.METALPRICE_API_KEY }}
           METALPRICE_API_BASE: https://api.metalpriceapi.com/v1
-          METALPRICE_PLAN: essential
+          METALPRICE_PLAN: basic
+          # Override plan-based default (basic = 10min) to 5min auto-refresh.
+          # Basic plan = 10k calls/mo. 5min × 12symbols/call = ~8640 calls/mo.
+          METALPRICE_REFRESH_MINUTES: "5"
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
           # Optional — leave the GitHub secrets unset for current behavior:
           #   REFRESH_TOKEN unset  → /api/refresh stays anonymous (existing prod behavior)
@@ -74,4 +77,4 @@ jobs:
             --allow-unauthenticated \
             --service-account $RUNTIME_SA \
             --min-instances 1 \
-            --update-env-vars METALPRICE_API_KEY=$METALPRICE_API_KEY,METALPRICE_API_BASE=$METALPRICE_API_BASE,METALPRICE_PLAN=$METALPRICE_PLAN,NEWS_API_KEY=$NEWS_API_KEY,REFRESH_TOKEN=$REFRESH_TOKEN,CORS_ALLOW_ORIGINS=$CORS_ALLOW_ORIGINS
+            --update-env-vars METALPRICE_API_KEY=$METALPRICE_API_KEY,METALPRICE_API_BASE=$METALPRICE_API_BASE,METALPRICE_PLAN=$METALPRICE_PLAN,METALPRICE_REFRESH_MINUTES=$METALPRICE_REFRESH_MINUTES,NEWS_API_KEY=$NEWS_API_KEY,REFRESH_TOKEN=$REFRESH_TOKEN,CORS_ALLOW_ORIGINS=$CORS_ALLOW_ORIGINS

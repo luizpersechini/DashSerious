@@ -116,6 +116,12 @@ function coalesceRefresh(): Promise<void> {
   return inFlightRefresh;
 }
 
+// Diagnostic state — surfaced via /health for ops visibility (audit #4).
+let lastRefreshAt: number | null = null;
+let lastRefreshError: string | null = null;
+let nextRefreshAt: number | null = null;
+let totalFailedChunks = 0;
+
 async function persistTimeseries(): Promise<void> {
   await persistTS(timeseriesBySymbol);
 }
@@ -133,8 +139,20 @@ const ready: Promise<void> = (async () => {
   await new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, READY_TIMEOUT_MS);
     coalesceRefresh()
-      .catch(() => {
-        /* boot anyway; handler will surface per-request errors */
+      .then(() => {
+        lastRefreshAt = Date.now();
+        lastRefreshError = null;
+      })
+      .catch((err: any) => {
+        // Boot anyway; /api gate will 503 until cache is warm.
+        lastRefreshError = err?.message ?? String(err);
+        console.error(
+          JSON.stringify({
+            severity: "ERROR",
+            component: "initial_refresh",
+            error: lastRefreshError,
+          }),
+        );
       })
       .finally(() => {
         clearTimeout(timer);
@@ -382,13 +400,23 @@ const TRACKED: Array<[string, string]> = [
 
 const NAME_TO_SYMBOL = new Map<string, string>(TRACKED.map(([s, n]) => [n, s]));
 
-// Readiness gate: block /api handlers until the initial refresh completes (bounded),
-// so the very first request never sees an empty cache.
-app.use("/api", async (_req, _res, next) => {
+// Readiness gate (audit #7): wait for the bounded `ready` promise, then return
+// 503 + Retry-After if the cache is still empty (e.g., first refresh failed)
+// instead of letting handlers serve empty data. Frontend should display a
+// warming-up state on 503.
+app.use("/api", async (_req, res, next) => {
   try {
     await ready;
   } catch {
-    /* surface per-request */
+    /* swallowed below by cache check */
+  }
+  if (caches.size === 0) {
+    res.setHeader("Retry-After", "5");
+    return res.status(503).json({
+      success: false,
+      error: "Cache warming up",
+      retryAfterMs: 5000,
+    });
   }
   next();
 });
@@ -445,12 +473,40 @@ app.get("/api/version", (_req, res) => {
 
 app.get("/health", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
+  // Compute oldest/newest data points across all symbols for chart-depth visibility.
+  let oldestPoint = Infinity;
+  let newestPoint = -Infinity;
+  for (const arr of timeseriesBySymbol.values()) {
+    if (arr.length === 0) continue;
+    if (arr[0]!.t < oldestPoint) oldestPoint = arr[0]!.t;
+    if (arr[arr.length - 1]!.t > newestPoint)
+      newestPoint = arr[arr.length - 1]!.t;
+  }
   return res.json({
     ok: true,
     cacheWarm: caches.size === TRACKED.length,
     cachedSymbols: caches.size,
     seedComplete,
     uptimeMs: Date.now() - bootStart,
+    // Diagnostics (audit #4)
+    refresh: {
+      intervalMs: REFRESH_INTERVAL_MS,
+      lastRefreshAt: lastRefreshAt
+        ? new Date(lastRefreshAt).toISOString()
+        : null,
+      lastRefreshError,
+      nextRefreshAt: nextRefreshAt
+        ? new Date(nextRefreshAt).toISOString()
+        : null,
+      msSinceLastSuccess: lastRefreshAt ? Date.now() - lastRefreshAt : null,
+    },
+    data: {
+      totalFailedChunks,
+      oldestPoint:
+        oldestPoint === Infinity ? null : new Date(oldestPoint).toISOString(),
+      newestPoint:
+        newestPoint === -Infinity ? null : new Date(newestPoint).toISOString(),
+    },
   });
 });
 
@@ -515,13 +571,36 @@ app.get("/api/news", async (_req, res) => {
   }
 });
 
-// Initial refresh is already kicked off by the `ready` promise above via coalesceRefresh().
-// Schedule periodic multi-symbol refresh to stay aligned with plan limits.
-setInterval(() => {
-  coalesceRefresh().catch(() => {
-    /* ignore periodic errors */
-  });
-}, REFRESH_INTERVAL_MS).unref();
+// Periodic refresh with retry/backoff (audit #3).
+// Replaces a bare setInterval: on failure, schedules a fast retry (1 min)
+// instead of waiting the full REFRESH_INTERVAL_MS cycle. Structured logging
+// to Cloud Logging via stderr.
+const RETRY_INTERVAL_MS = 60 * 1000;
+function scheduleNextRefresh(delayMs: number): void {
+  nextRefreshAt = Date.now() + delayMs;
+  setTimeout(async () => {
+    try {
+      await coalesceRefresh();
+      lastRefreshAt = Date.now();
+      lastRefreshError = null;
+      scheduleNextRefresh(REFRESH_INTERVAL_MS);
+    } catch (err: any) {
+      lastRefreshError = err?.message ?? String(err);
+      console.error(
+        JSON.stringify({
+          severity: "ERROR",
+          component: "periodic_refresh",
+          error: lastRefreshError,
+          nextAttemptInMs: RETRY_INTERVAL_MS,
+        }),
+      );
+      scheduleNextRefresh(RETRY_INTERVAL_MS);
+    }
+  }, delayMs).unref();
+}
+// Kick off the loop. First call happens after REFRESH_INTERVAL_MS — the
+// initial refresh on boot is handled by the `ready` promise above.
+scheduleNextRefresh(REFRESH_INTERVAL_MS);
 
 // Seed timeseries with historical data on startup. Fetches only missing date ranges
 // (backfill + top-up) to avoid re-hitting the API for data already on disk.
@@ -643,22 +722,44 @@ setInterval(() => {
         });
         if (!tf.success || !tf.rates) {
           failedChunks++;
-          console.error(`❌ Chunk ${fmt(start)}→${fmt(end)} failed:`, tf.error);
+          console.error(
+            JSON.stringify({
+              severity: "ERROR",
+              component: "seed_chunk",
+              outcome: "api_error",
+              start: fmt(start),
+              end: fmt(end),
+              error: tf.error,
+            }),
+          );
         } else {
           ingestChunk(tf.rates);
         }
       } catch (e: any) {
         failedChunks++;
         console.error(
-          `❌ Chunk ${fmt(start)}→${fmt(end)} threw:`,
-          e?.message ?? e,
+          JSON.stringify({
+            severity: "ERROR",
+            component: "seed_chunk",
+            outcome: "thrown",
+            start: fmt(start),
+            end: fmt(end),
+            error: e?.message ?? String(e),
+          }),
         );
       }
       if (i < ranges.length - 1) await new Promise((r) => setTimeout(r, 500));
     }
+    totalFailedChunks += failedChunks;
     if (failedChunks > 0) {
       console.warn(
-        `⚠️  Seed completed with ${failedChunks}/${ranges.length} chunks failed — chart may have gaps`,
+        JSON.stringify({
+          severity: "WARNING",
+          component: "seed",
+          failedChunks,
+          totalChunks: ranges.length,
+          message: "Seed completed with gaps",
+        }),
       );
     }
 

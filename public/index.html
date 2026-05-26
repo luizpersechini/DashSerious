@@ -1,1287 +1,2158 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Commodities — Market Overview</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
-  <script type="text/babel" src="tweaks-panel.jsx"></script>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Commodities — Market Overview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500&family=Syne:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script
+      src="https://unpkg.com/react@18.3.1/umd/react.development.js"
+      integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"
+      integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"
+      integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y"
+      crossorigin="anonymous"
+    ></script>
+    <script type="text/babel" src="tweaks-panel.jsx"></script>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
 
-    :root {
-      --bg: #080809;
-      --surface: #0f0f11;
-      --border: #1c1c20;
-      --border-strong: #2a2a30;
-      --text: #e8e8ec;
-      --muted: #8e8e9a;
-      --dim: #50505c;
+      :root {
+        --bg: #080809;
+        --surface: #0f0f11;
+        --border: #1c1c20;
+        --border-strong: #2a2a30;
+        --text: #e8e8ec;
+        --muted: #8e8e9a;
+        --dim: #50505c;
 
-      /* Metal accent colors — oklch, all same chroma/lightness, vary hue */
-      --gold:      oklch(0.72 0.14 72);
-      --silver:    oklch(0.72 0.04 240);
-      --platinum:  oklch(0.72 0.04 200);
-      --palladium: oklch(0.72 0.14 210);
-      --copper:    oklch(0.72 0.14 40);
-      --nickel:    oklch(0.72 0.14 155);
-      --cobalt:    oklch(0.72 0.14 260);
-      --brl:       oklch(0.72 0.14 130);
-      --brent:     oklch(0.72 0.16 55);
-      --wti:       oklch(0.72 0.16 45);
-      --eur:       oklch(0.72 0.10 270);
-      --cad:       oklch(0.72 0.14 25);
+        /* Metal accent colors — oklch, all same chroma/lightness, vary hue */
+        --gold: oklch(0.72 0.14 72);
+        --silver: oklch(0.72 0.04 240);
+        --platinum: oklch(0.72 0.04 200);
+        --palladium: oklch(0.72 0.14 210);
+        --copper: oklch(0.72 0.14 40);
+        --nickel: oklch(0.72 0.14 155);
+        --cobalt: oklch(0.72 0.14 260);
+        --brl: oklch(0.72 0.14 130);
+        --brent: oklch(0.72 0.16 55);
+        --wti: oklch(0.72 0.16 45);
+        --eur: oklch(0.72 0.1 270);
+        --cad: oklch(0.72 0.14 25);
 
-      --font-mono: 'DM Mono', 'Courier New', monospace;
-      --font-sans: 'Syne', system-ui, sans-serif;
-    }
+        --font-mono: "DM Mono", "Courier New", monospace;
+        --font-sans: "Syne", system-ui, sans-serif;
+      }
 
-    html, body { height: 100%; background: var(--bg); color: var(--text); }
+      html,
+      body {
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+      }
 
-    body {
-      font-family: var(--font-sans);
-      overflow-x: hidden;
-    }
+      body {
+        font-family: var(--font-sans);
+        overflow-x: hidden;
+      }
 
-    /* ─── Scrollbar ─── */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px; }
+      /* ─── Scrollbar ─── */
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--bg);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--dim);
+        border-radius: 3px;
+      }
 
-    #root { min-height: 100vh; }
+      #root {
+        min-height: 100vh;
+      }
 
-    /* ─── Micro sparkline canvas (drawn inline) ─── */
-    .spark { display: block; width: 100%; height: 100%; }
+      /* ─── Micro sparkline canvas (drawn inline) ─── */
+      .spark {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
 
-    /* ─── Skeleton shimmer ─── */
-    @keyframes shimmer {
-      0%   { background-position: -400px 0; }
-      100% { background-position:  400px 0; }
-    }
-    .skel {
-      display: inline-block;
-      background: linear-gradient(90deg, var(--dim) 0%, #35353f 50%, var(--dim) 100%);
-      background-size: 400px 100%;
-      animation: shimmer 1.4s ease-in-out infinite;
-      border-radius: 2px;
-    }
-  </style>
-</head>
-<body>
-<div id="root"></div>
-
-<script type="text/babel">
-const { useState, useEffect, useRef, useCallback, useMemo } = React;
-
-// ─── TWEAK DEFAULTS ──────────────────────────────────────────────────────────
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "layout": "editorial",
-  "density": "comfortable",
-  "chartStyle": "bar",
-  "showChange": true,
-  "heroMetal": "NI",
-  "colorScheme": "dark"
-}/*EDITMODE-END*/;
-
-// ─── DATA ────────────────────────────────────────────────────────────────────
-// Hex colors matching the oklch values — Canvas 2D can't parse oklch directly
-const METALS = [
-  { key: 'XAU', name: 'Gold',      symbol: 'XAU', unit: 'USD/oz',   color: '#d4a43a', cssColor: 'var(--gold)',      fmt: v => `$${v.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}` },
-  { key: 'XAG', name: 'Silver',    symbol: 'XAG', unit: 'USD/oz',   color: '#a0aec0', cssColor: 'var(--silver)',    fmt: v => `$${v.toFixed(2)}` },
-  { key: 'XPT', name: 'Platinum',  symbol: 'XPT', unit: 'USD/oz',   color: '#94a3b8', cssColor: 'var(--platinum)',  fmt: v => `$${v.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}` },
-  { key: 'XPD', name: 'Palladium', symbol: 'XPD', unit: 'USD/oz',   color: '#4db8d4', cssColor: 'var(--palladium)', fmt: v => `$${v.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}` },
-  { key: 'XCU', name: 'Copper',    symbol: 'XCU', unit: 'USD/lb',   color: '#d4773a', cssColor: 'var(--copper)',    fmt: v => `$${(v-0.15).toFixed(2)}`,                                   subLabel: v => `$${Math.round((v-0.15)*2204.623).toLocaleString('en-US')} /ton` },
-  { key: 'NI',  name: 'Nickel',    symbol: 'NI',  unit: 'USD/lb',   color: '#3ab87a', cssColor: 'var(--nickel)',    fmt: v => `$${(v-0.15).toFixed(2)}`,                                   subLabel: v => `$${Math.round((v-0.15)*2204.623).toLocaleString('en-US')} /ton` },
-  { key: 'XCO',   name: 'Cobalt',      symbol: 'XCO',   unit: 'USD/ton', color: '#4a7fd4', cssColor: 'var(--cobalt)',  fmt: v => `$${Math.round(v).toLocaleString('en-US')}`,                                          subLabel: v => `$${(v/2204.623).toFixed(2)} /lb` },
-  { key: 'BRL',   name: 'USD/BRL',     symbol: 'BRL',   unit: 'BRL/USD',color: '#5ab83a', cssColor: 'var(--brl)',    fmt: v => v.toFixed(4) },
-  { key: 'BRENT', name: 'Brent Crude', symbol: 'BRENT', unit: 'USD/bbl',color: '#c9822a', cssColor: 'var(--brent)', fmt: v => `$${v.toFixed(2)}` },
-  { key: 'WTI',   name: 'WTI Crude',   symbol: 'WTI',   unit: 'USD/bbl',color: '#bf6e20', cssColor: 'var(--wti)',   fmt: v => `$${v.toFixed(2)}` },
-  { key: 'EUR',   name: 'EUR/USD',      symbol: 'EUR',   unit: 'EUR/USD', color: '#7b8fcc', cssColor: 'var(--eur)',   fmt: v => v.toFixed(4) },
-  { key: 'CAD',   name: 'USD/CAD',      symbol: 'CAD',   unit: 'CAD/USD', color: '#cc6b4a', cssColor: 'var(--cad)',   fmt: v => v.toFixed(4) },
-];
-
-// ─── LOAD TIMESERIES ─────────────────────────────────────────────────────────
-async function loadData() {
-  const res = await fetch('/api/allmetals/timeseries?limit=2000');
-  const json = await res.json();
-  return json; // { success: true, symbols: { XAU: [{t,v},...], ... } }
-}
-
-function timeAgo(ms) {
-  if (!ms) return '';
-  const m = Math.floor((Date.now() - ms) / 60000);
-  if (m < 1)  return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
-
-function chipStyle(active) {
-  return {
-    background:    active ? 'var(--dim)' : 'rgba(255,255,255,0.06)',
-    border:        '1px solid ' + (active ? 'var(--border-strong)' : 'rgba(255,255,255,0.22)'),
-    color:         active ? 'var(--text)' : 'rgba(232,232,236,0.82)',
-    fontFamily:    'var(--font-mono)',
-    fontSize:      10,
-    letterSpacing: '0.1em',
-    padding:       '4px 10px',
-    cursor:        'pointer',
-    textTransform: 'uppercase',
-    transition:    'all 0.12s',
-  };
-}
-
-function FilterChips({ tags, active, onChange }) {
-  const metalMap = Object.fromEntries(METALS.map(m => [m.key, m]));
-  return (
-    <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
-      <button onClick={() => onChange(null)} style={chipStyle(active === null)}>ALL</button>
-      {tags.map(tag => {
-        const m = metalMap[tag];
-        if (!m) return null;
-        const isActive = active === tag;
-        return (
-          <button key={tag} onClick={() => onChange(isActive ? null : tag)} style={{
-            ...chipStyle(isActive),
-            color:       m.cssColor,
-            borderColor: isActive ? m.cssColor : 'rgba(255,255,255,0.55)',
-          }}>{tag}</button>
+      /* ─── Skeleton shimmer ─── */
+      @keyframes shimmer {
+        0% {
+          background-position: -400px 0;
+        }
+        100% {
+          background-position: 400px 0;
+        }
+      }
+      .skel {
+        display: inline-block;
+        background: linear-gradient(
+          90deg,
+          var(--dim) 0%,
+          #35353f 50%,
+          var(--dim) 100%
         );
-      })}
-    </div>
-  );
-}
-
-function NewsCard({ item }) {
-  const [hovered, setHovered] = React.useState(false);
-  const metalMap = Object.fromEntries(METALS.map(m => [m.key, m]));
-  return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        background:    'var(--surface)',
-        borderTop:     `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
-        borderRight:   `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
-        borderBottom:  `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
-        borderLeft:    '3px solid var(--dim)',
-        padding:       '14px 18px',
-        display:       'flex',
-        flexDirection: 'column',
-        gap:           8,
-        transition:    'border-color 0.15s ease',
-      }}
-    >
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-        <span style={{ fontFamily:'var(--font-mono)', fontSize:9, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--muted)', fontWeight:500 }}>
-          {item.source}
-        </span>
-        <span style={{ fontFamily:'var(--font-mono)', fontSize:9, color:'var(--dim)', letterSpacing:'0.04em' }}>
-          {timeAgo(item.pubMs)}
-        </span>
-      </div>
-      <a href={item.link} target="_blank" rel="noopener noreferrer" style={{
-        fontFamily:    'var(--font-sans)',
-        fontSize:      13,
-        fontWeight:    500,
-        color:         hovered ? 'var(--text)' : 'oklch(0.90 0.012 240)',
-        textDecoration:'none',
-        lineHeight:    1.35,
-        transition:    'color 0.12s',
-      }}>{item.title}</a>
-      {item.description && (
-        <p style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--muted)', lineHeight:1.5, margin:0, letterSpacing:'-0.01em' }}>
-          {item.description}
-        </p>
-      )}
-      {item.tags.length > 0 && (
-        <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:2 }}>
-          {item.tags.map(tag => {
-            const m = metalMap[tag];
-            if (!m) return null;
-            return (
-              <span key={tag} style={{
-                fontFamily:    'var(--font-mono)',
-                fontSize:      9,
-                letterSpacing: '0.1em',
-                color:         m.cssColor,
-                border:        `1px solid ${m.cssColor}`,
-                padding:       '2px 7px',
-                textTransform: 'uppercase',
-              }}>{tag}</span>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function NewsFeed({ newsData, isMobile }) {
-  const [activeTag, setActiveTag] = React.useState(null);
-  const items = newsData?.items ?? [];
-  const isConfigured = newsData === null || newsData.configured !== false;
-
-  const presentTags = React.useMemo(() => {
-    const s = new Set();
-    items.forEach(it => it.tags.forEach(t => s.add(t)));
-    return METALS.map(m => m.key).filter(k => s.has(k));
-  }, [items]);
-
-  const filtered = activeTag ? items.filter(it => Array.isArray(it.tags) && it.tags.includes(activeTag)) : items;
-
-  return (
-    <div style={{ marginTop: isMobile ? 28 : 40 }}>
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', gap:8, marginBottom: isMobile ? 10 : 14 }}>
-        <div style={{ display:'flex', alignItems:'baseline', gap:10 }}>
-          <span style={{ fontSize:10, fontFamily:'var(--font-mono)', letterSpacing:'0.12em', color:'var(--muted)', textTransform:'uppercase' }}>
-            Market News
-          </span>
-          <span style={{ fontSize:9, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.06em' }}>
-            — 30 min cache
-          </span>
-        </div>
-        {presentTags.length > 0 && (
-          <FilterChips tags={presentTags} active={activeTag} onChange={setActiveTag} />
-        )}
-      </div>
-
-      {!isConfigured && (
-        <div style={{ background:'var(--surface)', border:'1px solid var(--border)', borderLeft:'3px solid var(--dim)', padding:'14px 18px', fontFamily:'var(--font-mono)', fontSize:11, color:'var(--muted)', letterSpacing:'0.04em' }}>
-          Set <span style={{ color:'var(--text)' }}>NEWS_API_KEY</span> in .env to enable market news.
-          Free key at <span style={{ color:'var(--text)' }}>newsdata.io</span>.
-        </div>
-      )}
-
-      {newsData === null && (
-        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-          {[1,2,3].map(i => (
-            <div key={i} style={{ background:'var(--surface)', border:'1px solid var(--border)', padding:'16px 18px', height:80, opacity:0.5 }} />
-          ))}
-        </div>
-      )}
-
-      {newsData !== null && isConfigured && (
-        filtered.length === 0 ? (
-          <div style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--dim)', padding:'16px 0', letterSpacing:'0.06em' }}>
-            {activeTag ? `No articles tagged ${activeTag}` : 'No articles available.'}
-          </div>
-        ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap: isMobile ? 6 : 8 }}>
-            {filtered.map(item => <NewsCard key={item.id} item={item} />)}
-          </div>
-        )
-      )}
-    </div>
-  );
-}
-
-function getPoints(data, symbol, days = 365) {
-  const all = (data?.symbols?.[symbol] || []).slice().sort((a,b) => a.t - b.t);
-  if (days === 0) return all;
-  return all.slice(-days);
-}
-
-function computeChange(points) {
-  if (!points || points.length < 2) return null;
-  const first = points[0].v;
-  const last  = points[points.length - 1].v;
-  const pct   = ((last - first) / first) * 100;
-  return { pct, abs: last - first, direction: pct > 0.05 ? 'up' : pct < -0.05 ? 'down' : 'flat' };
-}
-
-// ─── SPARKLINE ───────────────────────────────────────────────────────────────
-function Sparkline({ points, color, style = 'area', height = 80 }) {
-  const canvasRef = useRef(null);
-  const animRef   = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    if (!points || points.length < 2) {
-      // Cancel any in-flight animation, then clear the canvas so no stale
-      // chart remains visible after switching to a sparse timeframe (e.g. 1D).
-      if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null; }
-      if (canvas.width > 0 && canvas.height > 0) {
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        background-size: 400px 100%;
+        animation: shimmer 1.4s ease-in-out infinite;
+        border-radius: 2px;
       }
-      return;
-    }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
 
-    function hexToRgb(hex) {
-      const h = hex.replace('#','');
-      const n = parseInt(h.length === 3
-        ? h.split('').map(c=>c+c).join('') : h, 16);
-      return [(n>>16)&255, (n>>8)&255, n&255];
-    }
-    const [r, g, b] = hexToRgb(color);
-    const solidColor = `rgb(${r},${g},${b})`;
-    const fillColor  = `rgba(${r},${g},${b},0.18)`;
-    const barColor   = `rgba(${r},${g},${b},0.28)`;
+    <script type="text/babel">
+      const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
-    function fmtDate(ts) {
-      return new Date(ts).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-    }
+      // ─── TWEAK DEFAULTS ──────────────────────────────────────────────────────────
+      const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
+        layout: "editorial",
+        density: "comfortable",
+        chartStyle: "bar",
+        showChange: true,
+        heroMetal: "NI",
+        colorScheme: "dark",
+      }; /*EDITMODE-END*/
 
-    function paint() {
-      if (animRef.current) cancelAnimationFrame(animRef.current);
+      // ─── DATA ────────────────────────────────────────────────────────────────────
+      // Hex colors matching the oklch values — Canvas 2D can't parse oklch directly
+      const METALS = [
+        {
+          key: "XAU",
+          name: "Gold",
+          symbol: "XAU",
+          unit: "USD/oz",
+          color: "#d4a43a",
+          cssColor: "var(--gold)",
+          fmt: (v) =>
+            `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        },
+        {
+          key: "XAG",
+          name: "Silver",
+          symbol: "XAG",
+          unit: "USD/oz",
+          color: "#a0aec0",
+          cssColor: "var(--silver)",
+          fmt: (v) => `$${v.toFixed(2)}`,
+        },
+        {
+          key: "XPT",
+          name: "Platinum",
+          symbol: "XPT",
+          unit: "USD/oz",
+          color: "#94a3b8",
+          cssColor: "var(--platinum)",
+          fmt: (v) =>
+            `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        },
+        {
+          key: "XPD",
+          name: "Palladium",
+          symbol: "XPD",
+          unit: "USD/oz",
+          color: "#4db8d4",
+          cssColor: "var(--palladium)",
+          fmt: (v) =>
+            `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        },
+        {
+          key: "XCU",
+          name: "Copper",
+          symbol: "XCU",
+          unit: "USD/lb",
+          color: "#d4773a",
+          cssColor: "var(--copper)",
+          fmt: (v) => `$${(v - 0.15).toFixed(2)}`,
+          subLabel: (v) =>
+            `$${Math.round((v - 0.15) * 2204.623).toLocaleString("en-US")} /ton`,
+        },
+        {
+          key: "NI",
+          name: "Nickel",
+          symbol: "NI",
+          unit: "USD/lb",
+          color: "#3ab87a",
+          cssColor: "var(--nickel)",
+          fmt: (v) => `$${(v - 0.15).toFixed(2)}`,
+          subLabel: (v) =>
+            `$${Math.round((v - 0.15) * 2204.623).toLocaleString("en-US")} /ton`,
+        },
+        {
+          key: "XCO",
+          name: "Cobalt",
+          symbol: "XCO",
+          unit: "USD/ton",
+          color: "#4a7fd4",
+          cssColor: "var(--cobalt)",
+          fmt: (v) => `$${Math.round(v).toLocaleString("en-US")}`,
+          subLabel: (v) => `$${(v / 2204.623).toFixed(2)} /lb`,
+        },
+        {
+          key: "BRL",
+          name: "USD/BRL",
+          symbol: "BRL",
+          unit: "BRL/USD",
+          color: "#5ab83a",
+          cssColor: "var(--brl)",
+          fmt: (v) => v.toFixed(4),
+        },
+        {
+          key: "BRENT",
+          name: "Brent Crude",
+          symbol: "BRENT",
+          unit: "USD/bbl",
+          color: "#c9822a",
+          cssColor: "var(--brent)",
+          fmt: (v) => `$${v.toFixed(2)}`,
+        },
+        {
+          key: "WTI",
+          name: "WTI Crude",
+          symbol: "WTI",
+          unit: "USD/bbl",
+          color: "#bf6e20",
+          cssColor: "var(--wti)",
+          fmt: (v) => `$${v.toFixed(2)}`,
+        },
+        {
+          key: "EUR",
+          name: "EUR/USD",
+          symbol: "EUR",
+          unit: "EUR/USD",
+          color: "#7b8fcc",
+          cssColor: "var(--eur)",
+          fmt: (v) => v.toFixed(4),
+        },
+        {
+          key: "CAD",
+          name: "USD/CAD",
+          symbol: "CAD",
+          unit: "CAD/USD",
+          color: "#cc6b4a",
+          cssColor: "var(--cad)",
+          fmt: (v) => v.toFixed(4),
+        },
+      ];
 
-      const W = (canvas.parentElement?.offsetWidth || canvas.offsetWidth || 200);
-      const H = height;
-      const dpr = window.devicePixelRatio || 1;
-
-      canvas.width        = W * dpr;
-      canvas.height       = H * dpr;
-      canvas.style.height = H + 'px';
-
-      const ctx = canvas.getContext('2d');
-      ctx.scale(dpr, dpr);
-
-      const LABEL_H = height >= 64 ? 12 : 0;  // tighter x-axis strip
-      const chartH  = H - LABEL_H;
-      const padX = 4;  // horizontal padding
-      const padY = 4;  // vertical padding inside chart area
-
-      const vals  = points.map(p => p.v);
-      const min   = Math.min(...vals);
-      const max   = Math.max(...vals);
-      const range = max - min || 1;
-
-      const xOf = i => padX + (i / (points.length - 1)) * (W - padX * 2);
-      const yOf = v => chartH - padY - ((v - min) / range) * (chartH - padY * 2);
-
-      function drawAxes() {
-        // ── X-axis date labels ──
-        if (LABEL_H > 0 && W >= 80) {
-          ctx.font = `9px 'DM Mono', monospace`;
-          ctx.fillStyle = 'rgba(90,90,104,0.8)';
-          ctx.textBaseline = 'bottom';
-          const last = points.length - 1;
-          const entries = W >= 160
-            ? [{ idx: 0, align: 'left' }, { idx: Math.floor(last / 2), align: 'center' }, { idx: last, align: 'right' }]
-            : [{ idx: 0, align: 'left' }, { idx: last, align: 'right' }];
-          entries.forEach(({ idx, align }) => {
-            ctx.textAlign = align;
-            ctx.fillText(fmtDate(points[idx].t), xOf(idx), H - 1);
-          });
-        }
-
+      // ─── LOAD TIMESERIES ─────────────────────────────────────────────────────────
+      async function loadData() {
+        const res = await fetch("/api/allmetals/timeseries?limit=2000");
+        const json = await res.json();
+        return json; // { success: true, symbols: { XAU: [{t,v},...], ... } }
       }
 
-      function draw(t) {
-        ctx.clearRect(0, 0, W, H);
-        const n = Math.max(2, Math.floor(points.length * t));
-
-        if (style === 'area') {
-          const grad = ctx.createLinearGradient(0, 0, 0, chartH);
-          grad.addColorStop(0, fillColor);
-          grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-          ctx.beginPath();
-          ctx.moveTo(xOf(0), yOf(points[0].v));
-          for (let i = 1; i < n; i++) ctx.lineTo(xOf(i), yOf(points[i].v));
-          ctx.lineTo(xOf(n - 1), chartH);
-          ctx.lineTo(xOf(0), chartH);
-          ctx.closePath();
-          ctx.fillStyle = grad;
-          ctx.fill();
-        }
-
-        ctx.beginPath();
-        ctx.moveTo(xOf(0), yOf(points[0].v));
-        for (let i = 1; i < n; i++) ctx.lineTo(xOf(i), yOf(points[i].v));
-        ctx.strokeStyle = solidColor;
-        ctx.lineWidth = style === 'bar' ? 1 : 1.5;
-        ctx.lineJoin = 'round';
-        ctx.lineCap  = 'round';
-        ctx.stroke();
-
-        if (style === 'bar') {
-          for (let i = 0; i < n; i++) {
-            const bw = Math.max(1, (W - padX * 2) / points.length - 1);
-            ctx.fillStyle = barColor;
-            ctx.fillRect(xOf(i) - bw/2, yOf(points[i].v), bw, chartH - yOf(points[i].v));
-          }
-        }
-
-        drawAxes();
+      function timeAgo(ms) {
+        if (!ms) return "";
+        const m = Math.floor((Date.now() - ms) / 60000);
+        if (m < 1) return "just now";
+        if (m < 60) return `${m}m ago`;
+        const h = Math.floor(m / 60);
+        if (h < 24) return `${h}h ago`;
+        return `${Math.floor(h / 24)}d ago`;
       }
 
-      const start = performance.now();
-      const dur   = 800;
-      function frame(now) {
-        const p = Math.min(1, (now - start) / dur);
-        draw(1 - Math.pow(1 - p, 3));
-        if (p < 1) animRef.current = requestAnimationFrame(frame);
+      function chipStyle(active) {
+        return {
+          background: active ? "var(--dim)" : "rgba(255,255,255,0.06)",
+          border:
+            "1px solid " +
+            (active ? "var(--border-strong)" : "rgba(255,255,255,0.22)"),
+          color: active ? "var(--text)" : "rgba(232,232,236,0.82)",
+          fontFamily: "var(--font-mono)",
+          fontSize: 10,
+          letterSpacing: "0.1em",
+          padding: "4px 10px",
+          cursor: "pointer",
+          textTransform: "uppercase",
+          transition: "all 0.12s",
+        };
       }
-      animRef.current = requestAnimationFrame(frame);
-    }
 
-    // Kick off initial paint immediately (synchronous path for when layout is already ready)
-    // and also watch via ResizeObserver for the case where layout commits later or the
-    // viewport resizes. Guard against double-cancel: if already animating at the right
-    // width, the ResizeObserver callback is a no-op.
-    paint();
-
-    const ro = new ResizeObserver(() => {
-      const newW = canvas.parentElement?.offsetWidth || 0;
-      const dpr  = window.devicePixelRatio || 1;
-      // Only repaint on genuine size changes; skip if correct animation is already running
-      if (canvas.width !== Math.round(newW * dpr)) paint();
-    });
-    ro.observe(canvas.parentElement || canvas);
-    return () => {
-      ro.disconnect();
-      if (animRef.current) cancelAnimationFrame(animRef.current);
-    };
-  }, [points, color, style, height]);
-
-  return <canvas ref={canvasRef} className="spark" style={{ height, display: 'block', width: '100%' }} />;
-}
-
-// ─── useWindowWidth ──────────────────────────────────────────────────────────
-function useWindowWidth() {
-  const [width, setWidth] = useState(() => window.innerWidth);
-  useEffect(() => {
-    const onResize = () => setWidth(window.innerWidth);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  return width;
-}
-
-// ─── CHANGE BADGE ─────────────────────────────────────────────────────────────
-function ChangeBadge({ change, large, noData }) {
-  if (!change) return noData
-    ? <span style={{ color:'var(--dim)', fontFamily:'var(--font-mono)', fontSize: large ? 14 : 11 }}>—</span>
-    : <span className="skel" style={{ width: 60, height: 18 }} />;
-  const sign  = change.direction === 'up' ? '+' : '';
-  const arrow = change.direction === 'up' ? '↑' : change.direction === 'down' ? '↓' : '→';
-  const clr   = change.direction === 'up'   ? 'oklch(0.72 0.15 155)'
-              : change.direction === 'down'  ? 'oklch(0.72 0.15 20)'
-              : 'var(--muted)';
-
-  return (
-    <span style={{
-      fontFamily: 'var(--font-mono)',
-      fontSize:   large ? 14 : 11,
-      fontWeight: 500,
-      color:      clr,
-      letterSpacing: '-0.02em',
-      display:    'flex',
-      alignItems: 'center',
-      gap:        4,
-    }}>
-      <span style={{ fontSize: large ? 16 : 13 }}>{arrow}</span>
-      {sign}{change.pct.toFixed(2)}%
-    </span>
-  );
-}
-
-// ─── HERO CARD ───────────────────────────────────────────────────────────────
-function HeroCard({ metal, points, change, tweaks, onExpand, isMobile, timeframe }) {
-  const [hovered, setHovered] = useState(false);
-  const latest = points?.[points.length - 1]?.v;
-  const chartH = isMobile ? 110 : 140;
-
-  return (
-    <div
-      onClick={onExpand}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        position:   'relative',
-        background: 'var(--surface)',
-        borderTop:    `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
-        borderRight:  `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
-        borderBottom: `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
-        borderLeft:   `3px solid ${metal.cssColor}`,
-        padding:    isMobile ? '20px 16px' : '28px 32px',
-        display:    isMobile ? 'flex' : 'grid',
-        flexDirection: 'column',
-        gridTemplateColumns: '1fr 1.8fr',
-        gap:        isMobile ? 14 : 32,
-        alignItems: isMobile ? 'stretch' : 'center',
-        cursor:     'pointer',
-        transition: 'border-color 0.15s ease, transform 0.15s ease',
-        transform:  hovered ? 'translateY(-1px)' : 'none',
-      }}
-    >
-      {/* Meta + price */}
-      <div>
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom: isMobile ? 10 : 16 }}>
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize:   11,
-            letterSpacing: '0.12em',
-            color:      metal.cssColor,
-            fontWeight: 500,
-            textTransform: 'uppercase',
-          }}>{metal.symbol}</span>
-          <span style={{ color:'var(--dim)', fontSize:11 }}>—</span>
-          <span style={{ color:'var(--muted)', fontSize:11, fontFamily:'var(--font-mono)', letterSpacing:'0.06em' }}>{metal.unit}</span>
-        </div>
-
-        <div style={{ fontFamily:'var(--font-sans)', fontSize:13, color:'var(--muted)', marginBottom:6, fontWeight:500, letterSpacing:'0.04em', textTransform:'uppercase' }}>
-          {metal.name}
-        </div>
-
-        <div style={{
-          fontFamily:    'var(--font-mono)',
-          fontSize:      isMobile ? 30 : 38,
-          fontWeight:    300,
-          letterSpacing: '-0.04em',
-          lineHeight:    1,
-          marginBottom:  10,
-          color:         'var(--text)',
-        }}>
-          {latest != null ? metal.fmt(latest) : <span className="skel" style={{ width: isMobile ? 140 : 200, height: isMobile ? 30 : 38 }} />}
-        </div>
-
-        {latest != null && metal.subLabel && (
-          <div style={{ fontFamily:'var(--font-mono)', fontSize:12, color:'var(--muted)', letterSpacing:'0.04em', marginTop:4, marginBottom:6 }}>
-            {metal.subLabel(latest)}
+      function FilterChips({ tags, active, onChange }) {
+        const metalMap = Object.fromEntries(METALS.map((m) => [m.key, m]));
+        return (
+          <div
+            style={{
+              display: "flex",
+              gap: 4,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <button
+              onClick={() => onChange(null)}
+              style={chipStyle(active === null)}
+            >
+              ALL
+            </button>
+            {tags.map((tag) => {
+              const m = metalMap[tag];
+              if (!m) return null;
+              const isActive = active === tag;
+              return (
+                <button
+                  key={tag}
+                  onClick={() => onChange(isActive ? null : tag)}
+                  style={{
+                    ...chipStyle(isActive),
+                    color: m.cssColor,
+                    borderColor: isActive
+                      ? m.cssColor
+                      : "rgba(255,255,255,0.55)",
+                  }}
+                >
+                  {tag}
+                </button>
+              );
+            })}
           </div>
-        )}
+        );
+      }
 
-        {tweaks.showChange && (
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <ChangeBadge change={change} large noData={!!points?.length} />
-            <span style={{ color:'var(--muted)', fontSize:11, fontFamily:'var(--font-mono)' }}>
-              {(TF_OPTIONS.find(o => o.days === timeframe) || TF_OPTIONS[4]).label.toLowerCase()}
-            </span>
-          </div>
-        )}
-
-        {/* Mini stats row — hide on mobile to save space */}
-        {!isMobile && points && points.length > 1 && (() => {
-          const vals = points.map(p=>p.v);
-          const lo   = Math.min(...vals);
-          const hi   = Math.max(...vals);
-          return (
-            <div style={{ display:'flex', gap:24, marginTop:20, paddingTop:16, borderTop:'1px solid var(--border)' }}>
-              {[['Low', metal.fmt(lo)], ['High', metal.fmt(hi)]].map(([lbl, val]) => (
-                <div key={lbl}>
-                  <div style={{ fontSize:10, color:'var(--muted)', fontFamily:'var(--font-mono)', letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:4 }}>{lbl}</div>
-                  <div style={{ fontSize:13, fontFamily:'var(--font-mono)', fontWeight:400, letterSpacing:'-0.02em' }}>{val}</div>
-                </div>
-              ))}
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* Chart */}
-      <div style={{ height: chartH, position:'relative' }}>
-        <Sparkline points={points} color={metal.color} style={tweaks.chartStyle} height={chartH} />
-      </div>
-
-      {/* Corner label */}
-      <div style={{
-        position:  'absolute',
-        top:       12,
-        right:     16,
-        fontSize:  10,
-        fontFamily:'var(--font-mono)',
-        color:     'var(--dim)',
-        letterSpacing: '0.08em',
-      }}>{(TF_OPTIONS.find(o => o.days === timeframe) || TF_OPTIONS[4]).label}</div>
-    </div>
-  );
-}
-
-// ─── COMPACT CARD ────────────────────────────────────────────────────────────
-function CompactCard({ metal, points, change, tweaks, dense, onExpand }) {
-  const [hovered, setHovered] = useState(false);
-  const latest = points?.[points.length - 1]?.v;
-
-  return (
-    <div
-      onClick={onExpand}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        position:   'relative',
-        background: 'var(--surface)',
-        borderTop:    `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
-        borderRight:  `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
-        borderBottom: `1px solid ${hovered ? 'var(--border-strong)' : 'var(--border)'}`,
-        borderLeft:   `3px solid ${metal.cssColor}`,
-        padding:    dense ? '16px 18px' : '20px 22px',
-        display:    'flex',
-        flexDirection: 'column',
-        gap:        dense ? 6 : 10,
-        cursor:     'pointer',
-        transition: 'border-color 0.15s ease, transform 0.15s ease',
-        transform:  hovered ? 'translateY(-1px)' : 'none',
-      }}
-    >
-      {/* Header row */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline' }}>
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize:   10,
-          letterSpacing: '0.12em',
-          color:      metal.cssColor,
-          fontWeight: 500,
-          textTransform: 'uppercase',
-        }}>{metal.symbol}</span>
-        {tweaks.showChange && <ChangeBadge change={change} noData={!!points?.length} />}
-      </div>
-
-      {/* Price */}
-      <div style={{
-        fontFamily:    'var(--font-mono)',
-        fontSize:      dense ? 22 : 26,
-        fontWeight:    300,
-        letterSpacing: '-0.04em',
-        lineHeight:    1,
-        color:         'var(--text)',
-      }}>
-        {latest != null ? metal.fmt(latest) : <span className="skel" style={{ width:120, height:26 }} />}
-      </div>
-
-      {latest != null && metal.subLabel && (
-        <div style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--muted)', letterSpacing:'0.04em', marginTop:3 }}>
-          {metal.subLabel(latest)}
-        </div>
-      )}
-
-      {/* Name + unit */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-        <span style={{ fontSize:11, color:'var(--muted)', fontFamily:'var(--font-sans)', fontWeight:500 }}>{metal.name}</span>
-        <span style={{ fontSize:10, color:'var(--dim)', fontFamily:'var(--font-mono)', letterSpacing:'0.06em' }}>{metal.unit}</span>
-      </div>
-
-      {/* Sparkline */}
-      <div style={{ height: dense ? 50 : 64, marginTop:4 }}>
-        <Sparkline points={points} color={metal.color} style={tweaks.chartStyle} height={dense ? 50 : 64} />
-      </div>
-
-      {/* Hover hint */}
-      {hovered && (
-        <div style={{
-          position:   'absolute',
-          bottom:     10,
-          right:      12,
-          fontSize:   9,
-          fontFamily: 'var(--font-mono)',
-          letterSpacing:'0.08em',
-          color:      'var(--dim)',
-          textTransform:'uppercase',
-        }}>Click to expand →</div>
-      )}
-    </div>
-  );
-}
-
-// ─── EXPANDED DETAIL PANEL ───────────────────────────────────────────────────
-function DetailPanel({ metal, points, change, onClose, tweaks, isMobile }) {
-  const [tf, setTf] = useState(365);
-  const [chartStyle, setChartStyle] = useState(tweaks.chartStyle);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    // Double-rAF ensures the initial render has committed before the transition fires
-    let id1, id2;
-    id1 = requestAnimationFrame(() => {
-      id2 = requestAnimationFrame(() => setVisible(true));
-    });
-    return () => { cancelAnimationFrame(id1); cancelAnimationFrame(id2); };
-  }, []);
-
-  const handleClose = () => {
-    setVisible(false);
-    setTimeout(onClose, 280);
-  };
-
-  // Slice points to selected timeframe
-  const allForMetal = points?.slice() || [];
-  const sliced = tf === 0 ? allForMetal : allForMetal.slice(-tf);
-  const latest = sliced[sliced.length - 1]?.v;
-  const localChange = computeChange(sliced);
-
-  const vals = sliced.map(p => p.v);
-  const lo = vals.length ? Math.min(...vals) : null;
-  const hi = vals.length ? Math.max(...vals) : null;
-
-  // Compute period return buckets
-  const tfs = [
-    { label: '1D',   days: 1 },
-    { label: '5D',   days: 5 },
-    { label: '30D',  days: 30 },
-    { label: '90D',  days: 90 },
-    { label: '1Y',   days: 365 },
-    { label: '3Y',   days: 1095 },
-    { label: 'ALL',  days: 0 },
-  ];
-
-  const periodReturns = tfs.map(({ label, days }) => {
-    const pts = days === 0 ? allForMetal : allForMetal.slice(-days);
-    const ch = computeChange(pts);
-    return { label, pct: ch?.pct ?? null, dir: ch?.direction ?? 'flat' };
-  });
-
-  return (
-    <div
-      onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
-      style={{
-        position:   'fixed',
-        inset:      0,
-        zIndex:     100,
-        background: visible ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0)',
-        backdropFilter: visible ? 'blur(4px)' : 'blur(0px)',
-        transition: 'background 0.28s ease, backdrop-filter 0.28s ease',
-        display:    'flex',
-        alignItems: isMobile ? 'flex-end' : 'stretch',
-        justifyContent: isMobile ? 'stretch' : 'flex-end',
-      }}
-    >
-      {/* Drawer — slides from right on desktop, from bottom on mobile */}
-      <div style={{
-        width:      isMobile ? '100%' : 'min(560px, 95vw)',
-        maxHeight:  isMobile ? '90vh' : 'none',
-        background: '#0c0c0e',
-        borderLeft: isMobile ? 'none' : `3px solid ${metal.cssColor}`,
-        borderTop:  isMobile ? `3px solid ${metal.cssColor}` : 'none',
-        borderRadius: isMobile ? '12px 12px 0 0' : 0,
-        display:    'flex',
-        flexDirection: 'column',
-        transform:  visible
-          ? 'translate(0,0)'
-          : isMobile ? 'translateY(100%)' : 'translateX(100%)',
-        transition: 'transform 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
-        overflowY:  'auto',
-      }}>
-        {/* Drawer header */}
-        <div style={{
-          padding:      '20px 24px 16px',
-          borderBottom: '1px solid var(--border)',
-          display:      'flex',
-          alignItems:   'flex-start',
-          justifyContent: 'space-between',
-          position:     'sticky',
-          top:          0,
-          background:   '#0c0c0e',
-          zIndex:       2,
-        }}>
-          <div>
-            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}>
-              <span style={{
-                fontFamily:   'var(--font-mono)',
-                fontSize:     10,
-                letterSpacing:'0.14em',
-                color:        metal.cssColor,
-                fontWeight:   500,
-                textTransform:'uppercase',
-              }}>{metal.symbol}</span>
-              <span style={{ color:'var(--dim)', fontSize:10, fontFamily:'var(--font-mono)' }}>{metal.unit}</span>
-            </div>
-            <div style={{
-              fontFamily:    'var(--font-mono)',
-              fontSize:      40,
-              fontWeight:    300,
-              letterSpacing: '-0.04em',
-              lineHeight:    1,
-              color:         'var(--text)',
-            }}>
-              {latest != null ? metal.fmt(latest) : '—'}
-            </div>
-            <div style={{ display:'flex', alignItems:'center', gap:12, marginTop:8 }}>
-              <ChangeBadge change={localChange} large />
-              <span style={{ fontSize:10, color:'var(--dim)', fontFamily:'var(--font-mono)' }}>
-                {tf === 0 ? 'ALL TIME' : tf + 'D PERIOD'}
+      function NewsCard({ item }) {
+        const [hovered, setHovered] = React.useState(false);
+        const metalMap = Object.fromEntries(METALS.map((m) => [m.key, m]));
+        return (
+          <div
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{
+              background: "var(--surface)",
+              borderTop: `1px solid ${hovered ? "var(--border-strong)" : "var(--border)"}`,
+              borderRight: `1px solid ${hovered ? "var(--border-strong)" : "var(--border)"}`,
+              borderBottom: `1px solid ${hovered ? "var(--border-strong)" : "var(--border)"}`,
+              borderLeft: "3px solid var(--dim)",
+              padding: "14px 18px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              transition: "border-color 0.15s ease",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 9,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  color: "var(--muted)",
+                  fontWeight: 500,
+                }}
+              >
+                {item.source}
+              </span>
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 9,
+                  color: "var(--dim)",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {timeAgo(item.pubMs)}
               </span>
             </div>
+            <a
+              href={item.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontFamily: "var(--font-sans)",
+                fontSize: 13,
+                fontWeight: 500,
+                color: hovered ? "var(--text)" : "oklch(0.90 0.012 240)",
+                textDecoration: "none",
+                lineHeight: 1.35,
+                transition: "color 0.12s",
+              }}
+            >
+              {item.title}
+            </a>
+            {item.description && (
+              <p
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 11,
+                  color: "var(--muted)",
+                  lineHeight: 1.5,
+                  margin: 0,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {item.description}
+              </p>
+            )}
+            {item.tags.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: 4,
+                  flexWrap: "wrap",
+                  marginTop: 2,
+                }}
+              >
+                {item.tags.map((tag) => {
+                  const m = metalMap[tag];
+                  if (!m) return null;
+                  return (
+                    <span
+                      key={tag}
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 9,
+                        letterSpacing: "0.1em",
+                        color: m.cssColor,
+                        border: `1px solid ${m.cssColor}`,
+                        padding: "2px 7px",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          <button
-            onClick={handleClose}
-            style={{
-              background:   'none',
-              border:       '1px solid var(--border)',
-              color:        'var(--muted)',
-              width:        32,
-              height:       32,
-              cursor:       'pointer',
-              fontFamily:   'var(--font-mono)',
-              fontSize:     16,
-              display:      'flex',
-              alignItems:   'center',
-              justifyContent: 'center',
-              flexShrink:   0,
-            }}
-          >×</button>
-        </div>
+        );
+      }
 
-        {/* Chart area */}
-        <div style={{ padding:'20px 24px 0' }}>
-          {/* TF + style controls */}
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, overflowX:'auto', scrollbarWidth:'none', gap:8 }}>
-            <TimeframeSelector value={tf} onChange={setTf} />
-            <div style={{ display:'flex', gap:2 }}>
-              {['area','line','bar'].map(s => (
-                <button key={s} onClick={() => setChartStyle(s)} style={{
-                  background:    chartStyle === s ? 'var(--dim)' : 'none',
-                  border:        '1px solid ' + (chartStyle === s ? 'var(--border-strong)' : 'transparent'),
-                  color:         chartStyle === s ? 'var(--text)' : 'var(--muted)',
-                  fontFamily:    'var(--font-mono)',
-                  fontSize:      10,
-                  letterSpacing: '0.06em',
-                  padding:       '4px 9px',
-                  cursor:        'pointer',
-                  textTransform: 'capitalize',
-                }}>{s}</button>
-              ))}
-            </div>
-          </div>
+      function NewsFeed({ newsData, isMobile }) {
+        const [activeTag, setActiveTag] = React.useState(null);
+        const items = newsData?.items ?? [];
+        const isConfigured = newsData === null || newsData.configured !== false;
 
-          <div style={{ height: 220 }}>
-            <Sparkline points={sliced} color={metal.color} style={chartStyle} height={220} />
-          </div>
-        </div>
+        const presentTags = React.useMemo(() => {
+          const s = new Set();
+          items.forEach((it) => it.tags.forEach((t) => s.add(t)));
+          return METALS.map((m) => m.key).filter((k) => s.has(k));
+        }, [items]);
 
-        {/* Stats grid */}
-        <div style={{ padding:'20px 24px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-          {[
-            { label: 'Current',   value: latest != null ? metal.fmt(latest) : '—' },
-            { label: 'Period Low', value: lo != null ? metal.fmt(lo) : '—' },
-            { label: 'Period High',value: hi != null ? metal.fmt(hi) : '—' },
-            { label: 'Data Points',value: sliced.length.toLocaleString() },
-          ].map(({ label, value }) => (
-            <div key={label} style={{
-              background:   'var(--surface)',
-              border:       '1px solid var(--border)',
-              padding:      '14px 16px',
-            }}>
-              <div style={{ fontSize:9, fontFamily:'var(--font-mono)', letterSpacing:'0.1em', color:'var(--muted)', textTransform:'uppercase', marginBottom:6 }}>{label}</div>
-              <div style={{ fontSize:16, fontFamily:'var(--font-mono)', fontWeight:300, letterSpacing:'-0.03em', color:'var(--text)' }}>{value}</div>
-            </div>
-          ))}
-        </div>
+        const filtered = activeTag
+          ? items.filter(
+              (it) => Array.isArray(it.tags) && it.tags.includes(activeTag),
+            )
+          : items;
 
-        {/* Period returns table */}
-        <div style={{ padding:'0 24px 24px' }}>
-          <div style={{ fontSize:9, fontFamily:'var(--font-mono)', letterSpacing:'0.1em', color:'var(--muted)', textTransform:'uppercase', marginBottom:10 }}>Period Returns</div>
-          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-            {periodReturns.map(({ label, pct, dir }) => (
-              <div key={label} style={{
-                display:        'flex',
-                alignItems:     'center',
-                justifyContent: 'space-between',
-                padding:        '9px 14px',
-                background:     'var(--surface)',
-                border:         '1px solid var(--border)',
-              }}>
-                <span style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--muted)', letterSpacing:'0.06em' }}>{label}</span>
-                <span style={{
-                  fontFamily:    'var(--font-mono)',
-                  fontSize:      13,
-                  fontWeight:    400,
-                  letterSpacing: '-0.02em',
-                  color: pct == null ? 'var(--dim)'
-                       : dir === 'up'   ? 'oklch(0.72 0.15 155)'
-                       : dir === 'down'  ? 'oklch(0.72 0.15 20)'
-                       : 'var(--muted)',
-                }}>
-                  {pct == null ? '—' : `${pct > 0 ? '+' : ''}${pct.toFixed(2)}%`}
+        return (
+          <div style={{ marginTop: isMobile ? 28 : 40 }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-start",
+                gap: 8,
+                marginBottom: isMobile ? 10 : 14,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontFamily: "var(--font-mono)",
+                    letterSpacing: "0.12em",
+                    color: "var(--muted)",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Market News
                 </span>
-                {/* Bar indicator */}
-                {pct != null && (
-                  <div style={{ width:80, height:3, background:'var(--border)', marginLeft:12, position:'relative', overflow:'hidden' }}>
-                    <div style={{
-                      position:   'absolute',
-                      left:       pct < 0 ? `${50 + Math.max(-50, pct/2)}%` : '50%',
-                      width:      `${Math.min(50, Math.abs(pct)/2)}%`,
-                      height:     '100%',
-                      background: dir === 'up' ? 'oklch(0.72 0.15 155)' : 'oklch(0.72 0.15 20)',
-                    }} />
-                  </div>
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontFamily: "var(--font-mono)",
+                    color: "var(--dim)",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  — 30 min cache
+                </span>
+              </div>
+              {presentTags.length > 0 && (
+                <FilterChips
+                  tags={presentTags}
+                  active={activeTag}
+                  onChange={setActiveTag}
+                />
+              )}
+            </div>
+
+            {!isConfigured && (
+              <div
+                style={{
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderLeft: "3px solid var(--dim)",
+                  padding: "14px 18px",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 11,
+                  color: "var(--muted)",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                Set <span style={{ color: "var(--text)" }}>NEWS_API_KEY</span>{" "}
+                in .env to enable market news. Free key at{" "}
+                <span style={{ color: "var(--text)" }}>newsdata.io</span>.
+              </div>
+            )}
+
+            {newsData === null && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    style={{
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      padding: "16px 18px",
+                      height: 80,
+                      opacity: 0.5,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {newsData !== null &&
+              isConfigured &&
+              (filtered.length === 0 ? (
+                <div
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    color: "var(--dim)",
+                    padding: "16px 0",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  {activeTag
+                    ? `No articles tagged ${activeTag}`
+                    : "No articles available."}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: isMobile ? 6 : 8,
+                  }}
+                >
+                  {filtered.map((item) => (
+                    <NewsCard key={item.id} item={item} />
+                  ))}
+                </div>
+              ))}
+          </div>
+        );
+      }
+
+      function getPoints(data, symbol, days = 365) {
+        const all = (data?.symbols?.[symbol] || [])
+          .slice()
+          .sort((a, b) => a.t - b.t);
+        if (days === 0) return all;
+        return all.slice(-days);
+      }
+
+      function computeChange(points) {
+        if (!points || points.length < 2) return null;
+        const first = points[0].v;
+        const last = points[points.length - 1].v;
+        const pct = ((last - first) / first) * 100;
+        return {
+          pct,
+          abs: last - first,
+          direction: pct > 0.05 ? "up" : pct < -0.05 ? "down" : "flat",
+        };
+      }
+
+      // ─── SPARKLINE ───────────────────────────────────────────────────────────────
+      function Sparkline({ points, color, style = "area", height = 80 }) {
+        const canvasRef = useRef(null);
+        const animRef = useRef(null);
+
+        useEffect(() => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          if (!points || points.length < 2) {
+            // Cancel any in-flight animation, then clear the canvas so no stale
+            // chart remains visible after switching to a sparse timeframe (e.g. 1D).
+            if (animRef.current) {
+              cancelAnimationFrame(animRef.current);
+              animRef.current = null;
+            }
+            if (canvas.width > 0 && canvas.height > 0) {
+              const ctx = canvas.getContext("2d");
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            return;
+          }
+
+          function hexToRgb(hex) {
+            const h = hex.replace("#", "");
+            const n = parseInt(
+              h.length === 3
+                ? h
+                    .split("")
+                    .map((c) => c + c)
+                    .join("")
+                : h,
+              16,
+            );
+            return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+          }
+          const [r, g, b] = hexToRgb(color);
+          const solidColor = `rgb(${r},${g},${b})`;
+          const fillColor = `rgba(${r},${g},${b},0.18)`;
+          const barColor = `rgba(${r},${g},${b},0.28)`;
+
+          function fmtDate(ts) {
+            return new Date(ts).toLocaleDateString("en-US", {
+              month: "short",
+              year: "2-digit",
+            });
+          }
+
+          function paint() {
+            if (animRef.current) cancelAnimationFrame(animRef.current);
+
+            const W =
+              canvas.parentElement?.offsetWidth || canvas.offsetWidth || 200;
+            const H = height;
+            const dpr = window.devicePixelRatio || 1;
+
+            canvas.width = W * dpr;
+            canvas.height = H * dpr;
+            canvas.style.height = H + "px";
+
+            const ctx = canvas.getContext("2d");
+            ctx.scale(dpr, dpr);
+
+            const LABEL_H = height >= 64 ? 12 : 0; // tighter x-axis strip
+            const chartH = H - LABEL_H;
+            const padX = 4; // horizontal padding
+            const padY = 4; // vertical padding inside chart area
+
+            const vals = points.map((p) => p.v);
+            const min = Math.min(...vals);
+            const max = Math.max(...vals);
+            const range = max - min || 1;
+
+            const xOf = (i) =>
+              padX + (i / (points.length - 1)) * (W - padX * 2);
+            const yOf = (v) =>
+              chartH - padY - ((v - min) / range) * (chartH - padY * 2);
+
+            function drawAxes() {
+              // ── X-axis date labels ──
+              if (LABEL_H > 0 && W >= 80) {
+                ctx.font = `9px 'DM Mono', monospace`;
+                ctx.fillStyle = "rgba(90,90,104,0.8)";
+                ctx.textBaseline = "bottom";
+                const last = points.length - 1;
+                const entries =
+                  W >= 160
+                    ? [
+                        { idx: 0, align: "left" },
+                        { idx: Math.floor(last / 2), align: "center" },
+                        { idx: last, align: "right" },
+                      ]
+                    : [
+                        { idx: 0, align: "left" },
+                        { idx: last, align: "right" },
+                      ];
+                entries.forEach(({ idx, align }) => {
+                  ctx.textAlign = align;
+                  ctx.fillText(fmtDate(points[idx].t), xOf(idx), H - 1);
+                });
+              }
+            }
+
+            function draw(t) {
+              ctx.clearRect(0, 0, W, H);
+              const n = Math.max(2, Math.floor(points.length * t));
+
+              if (style === "area") {
+                const grad = ctx.createLinearGradient(0, 0, 0, chartH);
+                grad.addColorStop(0, fillColor);
+                grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+                ctx.beginPath();
+                ctx.moveTo(xOf(0), yOf(points[0].v));
+                for (let i = 1; i < n; i++)
+                  ctx.lineTo(xOf(i), yOf(points[i].v));
+                ctx.lineTo(xOf(n - 1), chartH);
+                ctx.lineTo(xOf(0), chartH);
+                ctx.closePath();
+                ctx.fillStyle = grad;
+                ctx.fill();
+              }
+
+              ctx.beginPath();
+              ctx.moveTo(xOf(0), yOf(points[0].v));
+              for (let i = 1; i < n; i++) ctx.lineTo(xOf(i), yOf(points[i].v));
+              ctx.strokeStyle = solidColor;
+              ctx.lineWidth = style === "bar" ? 1 : 1.5;
+              ctx.lineJoin = "round";
+              ctx.lineCap = "round";
+              ctx.stroke();
+
+              if (style === "bar") {
+                for (let i = 0; i < n; i++) {
+                  const bw = Math.max(1, (W - padX * 2) / points.length - 1);
+                  ctx.fillStyle = barColor;
+                  ctx.fillRect(
+                    xOf(i) - bw / 2,
+                    yOf(points[i].v),
+                    bw,
+                    chartH - yOf(points[i].v),
+                  );
+                }
+              }
+
+              drawAxes();
+            }
+
+            const start = performance.now();
+            const dur = 800;
+            function frame(now) {
+              const p = Math.min(1, (now - start) / dur);
+              draw(1 - Math.pow(1 - p, 3));
+              if (p < 1) animRef.current = requestAnimationFrame(frame);
+            }
+            animRef.current = requestAnimationFrame(frame);
+          }
+
+          // Kick off initial paint immediately (synchronous path for when layout is already ready)
+          // and also watch via ResizeObserver for the case where layout commits later or the
+          // viewport resizes. Guard against double-cancel: if already animating at the right
+          // width, the ResizeObserver callback is a no-op.
+          paint();
+
+          const ro = new ResizeObserver(() => {
+            const newW = canvas.parentElement?.offsetWidth || 0;
+            const dpr = window.devicePixelRatio || 1;
+            // Only repaint on genuine size changes; skip if correct animation is already running
+            if (canvas.width !== Math.round(newW * dpr)) paint();
+          });
+          ro.observe(canvas.parentElement || canvas);
+          return () => {
+            ro.disconnect();
+            if (animRef.current) cancelAnimationFrame(animRef.current);
+          };
+        }, [points, color, style, height]);
+
+        return (
+          <canvas
+            ref={canvasRef}
+            className="spark"
+            style={{ height, display: "block", width: "100%" }}
+          />
+        );
+      }
+
+      // ─── useWindowWidth ──────────────────────────────────────────────────────────
+      function useWindowWidth() {
+        const [width, setWidth] = useState(() => window.innerWidth);
+        useEffect(() => {
+          const onResize = () => setWidth(window.innerWidth);
+          window.addEventListener("resize", onResize);
+          return () => window.removeEventListener("resize", onResize);
+        }, []);
+        return width;
+      }
+
+      // ─── CHANGE BADGE ─────────────────────────────────────────────────────────────
+      function ChangeBadge({ change, large, noData }) {
+        if (!change)
+          return noData ? (
+            <span
+              style={{
+                color: "var(--dim)",
+                fontFamily: "var(--font-mono)",
+                fontSize: large ? 14 : 11,
+              }}
+            >
+              —
+            </span>
+          ) : (
+            <span className="skel" style={{ width: 60, height: 18 }} />
+          );
+        const sign = change.direction === "up" ? "+" : "";
+        const arrow =
+          change.direction === "up"
+            ? "↑"
+            : change.direction === "down"
+              ? "↓"
+              : "→";
+        const clr =
+          change.direction === "up"
+            ? "oklch(0.72 0.15 155)"
+            : change.direction === "down"
+              ? "oklch(0.72 0.15 20)"
+              : "var(--muted)";
+
+        return (
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: large ? 14 : 11,
+              fontWeight: 500,
+              color: clr,
+              letterSpacing: "-0.02em",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            <span style={{ fontSize: large ? 16 : 13 }}>{arrow}</span>
+            {sign}
+            {change.pct.toFixed(2)}%
+          </span>
+        );
+      }
+
+      // ─── HERO CARD ───────────────────────────────────────────────────────────────
+      function HeroCard({
+        metal,
+        points,
+        change,
+        tweaks,
+        onExpand,
+        isMobile,
+        timeframe,
+      }) {
+        const [hovered, setHovered] = useState(false);
+        const latest = points?.[points.length - 1]?.v;
+        const chartH = isMobile ? 110 : 140;
+
+        return (
+          <div
+            onClick={onExpand}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{
+              position: "relative",
+              background: "var(--surface)",
+              borderTop: `1px solid ${hovered ? "var(--border-strong)" : "var(--border)"}`,
+              borderRight: `1px solid ${hovered ? "var(--border-strong)" : "var(--border)"}`,
+              borderBottom: `1px solid ${hovered ? "var(--border-strong)" : "var(--border)"}`,
+              borderLeft: `3px solid ${metal.cssColor}`,
+              padding: isMobile ? "20px 16px" : "28px 32px",
+              display: isMobile ? "flex" : "grid",
+              flexDirection: "column",
+              gridTemplateColumns: "1fr 1.8fr",
+              gap: isMobile ? 14 : 32,
+              alignItems: isMobile ? "stretch" : "center",
+              cursor: "pointer",
+              transition: "border-color 0.15s ease, transform 0.15s ease",
+              transform: hovered ? "translateY(-1px)" : "none",
+            }}
+          >
+            {/* Meta + price */}
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: isMobile ? 10 : 16,
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    letterSpacing: "0.12em",
+                    color: metal.cssColor,
+                    fontWeight: 500,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {metal.symbol}
+                </span>
+                <span style={{ color: "var(--dim)", fontSize: 11 }}>—</span>
+                <span
+                  style={{
+                    color: "var(--muted)",
+                    fontSize: 11,
+                    fontFamily: "var(--font-mono)",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  {metal.unit}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  fontFamily: "var(--font-sans)",
+                  fontSize: 13,
+                  color: "var(--muted)",
+                  marginBottom: 6,
+                  fontWeight: 500,
+                  letterSpacing: "0.04em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {metal.name}
+              </div>
+
+              <div
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: isMobile ? 30 : 38,
+                  fontWeight: 300,
+                  letterSpacing: "-0.04em",
+                  lineHeight: 1,
+                  marginBottom: 10,
+                  color: "var(--text)",
+                }}
+              >
+                {latest != null ? (
+                  metal.fmt(latest)
+                ) : (
+                  <span
+                    className="skel"
+                    style={{
+                      width: isMobile ? 140 : 200,
+                      height: isMobile ? 30 : 38,
+                    }}
+                  />
                 )}
               </div>
+
+              {latest != null && metal.subLabel && (
+                <div
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 12,
+                    color: "var(--muted)",
+                    letterSpacing: "0.04em",
+                    marginTop: 4,
+                    marginBottom: 6,
+                  }}
+                >
+                  {metal.subLabel(latest)}
+                </div>
+              )}
+
+              {tweaks.showChange && (
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <ChangeBadge
+                    change={change}
+                    large
+                    noData={!!points?.length}
+                  />
+                  <span
+                    style={{
+                      color: "var(--muted)",
+                      fontSize: 11,
+                      fontFamily: "var(--font-mono)",
+                    }}
+                  >
+                    {(
+                      TF_OPTIONS.find((o) => o.days === timeframe) ||
+                      TF_OPTIONS[4]
+                    ).label.toLowerCase()}
+                  </span>
+                </div>
+              )}
+
+              {/* Mini stats row — hide on mobile to save space */}
+              {!isMobile &&
+                points &&
+                points.length > 1 &&
+                (() => {
+                  const vals = points.map((p) => p.v);
+                  const lo = Math.min(...vals);
+                  const hi = Math.max(...vals);
+                  return (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 24,
+                        marginTop: 20,
+                        paddingTop: 16,
+                        borderTop: "1px solid var(--border)",
+                      }}
+                    >
+                      {[
+                        ["Low", metal.fmt(lo)],
+                        ["High", metal.fmt(hi)],
+                      ].map(([lbl, val]) => (
+                        <div key={lbl}>
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: "var(--muted)",
+                              fontFamily: "var(--font-mono)",
+                              letterSpacing: "0.08em",
+                              textTransform: "uppercase",
+                              marginBottom: 4,
+                            }}
+                          >
+                            {lbl}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 13,
+                              fontFamily: "var(--font-mono)",
+                              fontWeight: 400,
+                              letterSpacing: "-0.02em",
+                            }}
+                          >
+                            {val}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+            </div>
+
+            {/* Chart */}
+            <div style={{ height: chartH, position: "relative" }}>
+              <Sparkline
+                points={points}
+                color={metal.color}
+                style={tweaks.chartStyle}
+                height={chartH}
+              />
+            </div>
+
+            {/* Corner label */}
+            <div
+              style={{
+                position: "absolute",
+                top: 12,
+                right: 16,
+                fontSize: 10,
+                fontFamily: "var(--font-mono)",
+                color: "var(--dim)",
+                letterSpacing: "0.08em",
+              }}
+            >
+              {
+                (TF_OPTIONS.find((o) => o.days === timeframe) || TF_OPTIONS[4])
+                  .label
+              }
+            </div>
+          </div>
+        );
+      }
+
+      // ─── COMPACT CARD ────────────────────────────────────────────────────────────
+      function CompactCard({ metal, points, change, tweaks, dense, onExpand }) {
+        const [hovered, setHovered] = useState(false);
+        const latest = points?.[points.length - 1]?.v;
+
+        return (
+          <div
+            onClick={onExpand}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{
+              position: "relative",
+              background: "var(--surface)",
+              borderTop: `1px solid ${hovered ? "var(--border-strong)" : "var(--border)"}`,
+              borderRight: `1px solid ${hovered ? "var(--border-strong)" : "var(--border)"}`,
+              borderBottom: `1px solid ${hovered ? "var(--border-strong)" : "var(--border)"}`,
+              borderLeft: `3px solid ${metal.cssColor}`,
+              padding: dense ? "16px 18px" : "20px 22px",
+              display: "flex",
+              flexDirection: "column",
+              gap: dense ? 6 : 10,
+              cursor: "pointer",
+              transition: "border-color 0.15s ease, transform 0.15s ease",
+              transform: hovered ? "translateY(-1px)" : "none",
+            }}
+          >
+            {/* Header row */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 10,
+                  letterSpacing: "0.12em",
+                  color: metal.cssColor,
+                  fontWeight: 500,
+                  textTransform: "uppercase",
+                }}
+              >
+                {metal.symbol}
+              </span>
+              {tweaks.showChange && (
+                <ChangeBadge change={change} noData={!!points?.length} />
+              )}
+            </div>
+
+            {/* Price */}
+            <div
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: dense ? 22 : 26,
+                fontWeight: 300,
+                letterSpacing: "-0.04em",
+                lineHeight: 1,
+                color: "var(--text)",
+              }}
+            >
+              {latest != null ? (
+                metal.fmt(latest)
+              ) : (
+                <span className="skel" style={{ width: 120, height: 26 }} />
+              )}
+            </div>
+
+            {latest != null && metal.subLabel && (
+              <div
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 11,
+                  color: "var(--muted)",
+                  letterSpacing: "0.04em",
+                  marginTop: 3,
+                }}
+              >
+                {metal.subLabel(latest)}
+              </div>
+            )}
+
+            {/* Name + unit */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--muted)",
+                  fontFamily: "var(--font-sans)",
+                  fontWeight: 500,
+                }}
+              >
+                {metal.name}
+              </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  color: "var(--dim)",
+                  fontFamily: "var(--font-mono)",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                {metal.unit}
+              </span>
+            </div>
+
+            {/* Sparkline */}
+            <div style={{ height: dense ? 50 : 64, marginTop: 4 }}>
+              <Sparkline
+                points={points}
+                color={metal.color}
+                style={tweaks.chartStyle}
+                height={dense ? 50 : 64}
+              />
+            </div>
+
+            {/* Hover hint */}
+            {hovered && (
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: 10,
+                  right: 12,
+                  fontSize: 9,
+                  fontFamily: "var(--font-mono)",
+                  letterSpacing: "0.08em",
+                  color: "var(--dim)",
+                  textTransform: "uppercase",
+                }}
+              >
+                Click to expand →
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // ─── EXPANDED DETAIL PANEL ───────────────────────────────────────────────────
+      function DetailPanel({
+        metal,
+        points,
+        change,
+        onClose,
+        tweaks,
+        isMobile,
+      }) {
+        const [tf, setTf] = useState(365);
+        const [chartStyle, setChartStyle] = useState(tweaks.chartStyle);
+        const [visible, setVisible] = useState(false);
+
+        useEffect(() => {
+          // Double-rAF ensures the initial render has committed before the transition fires
+          let id1, id2;
+          id1 = requestAnimationFrame(() => {
+            id2 = requestAnimationFrame(() => setVisible(true));
+          });
+          return () => {
+            cancelAnimationFrame(id1);
+            cancelAnimationFrame(id2);
+          };
+        }, []);
+
+        const handleClose = () => {
+          setVisible(false);
+          setTimeout(onClose, 280);
+        };
+
+        // Slice points to selected timeframe
+        const allForMetal = points?.slice() || [];
+        const sliced = tf === 0 ? allForMetal : allForMetal.slice(-tf);
+        const latest = sliced[sliced.length - 1]?.v;
+        const localChange = computeChange(sliced);
+
+        const vals = sliced.map((p) => p.v);
+        const lo = vals.length ? Math.min(...vals) : null;
+        const hi = vals.length ? Math.max(...vals) : null;
+
+        // Compute period return buckets
+        const tfs = [
+          { label: "1D", days: 1 },
+          { label: "5D", days: 5 },
+          { label: "30D", days: 30 },
+          { label: "90D", days: 90 },
+          { label: "1Y", days: 365 },
+          { label: "3Y", days: 1095 },
+          { label: "ALL", days: 0 },
+        ];
+
+        const periodReturns = tfs.map(({ label, days }) => {
+          const pts = days === 0 ? allForMetal : allForMetal.slice(-days);
+          const ch = computeChange(pts);
+          return { label, pct: ch?.pct ?? null, dir: ch?.direction ?? "flat" };
+        });
+
+        return (
+          <div
+            onClick={(e) => {
+              if (e.target === e.currentTarget) handleClose();
+            }}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 100,
+              background: visible ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0)",
+              backdropFilter: visible ? "blur(4px)" : "blur(0px)",
+              transition: "background 0.28s ease, backdrop-filter 0.28s ease",
+              display: "flex",
+              alignItems: isMobile ? "flex-end" : "stretch",
+              justifyContent: isMobile ? "stretch" : "flex-end",
+            }}
+          >
+            {/* Drawer — slides from right on desktop, from bottom on mobile */}
+            <div
+              style={{
+                width: isMobile ? "100%" : "min(560px, 95vw)",
+                maxHeight: isMobile ? "90vh" : "none",
+                background: "#0c0c0e",
+                borderLeft: isMobile ? "none" : `3px solid ${metal.cssColor}`,
+                borderTop: isMobile ? `3px solid ${metal.cssColor}` : "none",
+                borderRadius: isMobile ? "12px 12px 0 0" : 0,
+                display: "flex",
+                flexDirection: "column",
+                transform: visible
+                  ? "translate(0,0)"
+                  : isMobile
+                    ? "translateY(100%)"
+                    : "translateX(100%)",
+                transition: "transform 0.28s cubic-bezier(0.32, 0.72, 0, 1)",
+                overflowY: "auto",
+              }}
+            >
+              {/* Drawer header */}
+              <div
+                style={{
+                  padding: "20px 24px 16px",
+                  borderBottom: "1px solid var(--border)",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  position: "sticky",
+                  top: 0,
+                  background: "#0c0c0e",
+                  zIndex: 2,
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      marginBottom: 6,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 10,
+                        letterSpacing: "0.14em",
+                        color: metal.cssColor,
+                        fontWeight: 500,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {metal.symbol}
+                    </span>
+                    <span
+                      style={{
+                        color: "var(--dim)",
+                        fontSize: 10,
+                        fontFamily: "var(--font-mono)",
+                      }}
+                    >
+                      {metal.unit}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 40,
+                      fontWeight: 300,
+                      letterSpacing: "-0.04em",
+                      lineHeight: 1,
+                      color: "var(--text)",
+                    }}
+                  >
+                    {latest != null ? metal.fmt(latest) : "—"}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      marginTop: 8,
+                    }}
+                  >
+                    <ChangeBadge change={localChange} large />
+                    <span
+                      style={{
+                        fontSize: 10,
+                        color: "var(--dim)",
+                        fontFamily: "var(--font-mono)",
+                      }}
+                    >
+                      {tf === 0 ? "ALL TIME" : tf + "D PERIOD"}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={handleClose}
+                  style={{
+                    background: "none",
+                    border: "1px solid var(--border)",
+                    color: "var(--muted)",
+                    width: 32,
+                    height: 32,
+                    cursor: "pointer",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 16,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Chart area */}
+              <div style={{ padding: "20px 24px 0" }}>
+                {/* TF + style controls */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 14,
+                    overflowX: "auto",
+                    scrollbarWidth: "none",
+                    gap: 8,
+                  }}
+                >
+                  <TimeframeSelector value={tf} onChange={setTf} />
+                  <div style={{ display: "flex", gap: 2 }}>
+                    {["area", "line", "bar"].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setChartStyle(s)}
+                        style={{
+                          background: chartStyle === s ? "var(--dim)" : "none",
+                          border:
+                            "1px solid " +
+                            (chartStyle === s
+                              ? "var(--border-strong)"
+                              : "transparent"),
+                          color:
+                            chartStyle === s ? "var(--text)" : "var(--muted)",
+                          fontFamily: "var(--font-mono)",
+                          fontSize: 10,
+                          letterSpacing: "0.06em",
+                          padding: "4px 9px",
+                          cursor: "pointer",
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ height: 220 }}>
+                  <Sparkline
+                    points={sliced}
+                    color={metal.color}
+                    style={chartStyle}
+                    height={220}
+                  />
+                </div>
+              </div>
+
+              {/* Stats grid */}
+              <div
+                style={{
+                  padding: "20px 24px",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                }}
+              >
+                {[
+                  {
+                    label: "Current",
+                    value: latest != null ? metal.fmt(latest) : "—",
+                  },
+                  {
+                    label: "Period Low",
+                    value: lo != null ? metal.fmt(lo) : "—",
+                  },
+                  {
+                    label: "Period High",
+                    value: hi != null ? metal.fmt(hi) : "—",
+                  },
+                  {
+                    label: "Data Points",
+                    value: sliced.length.toLocaleString(),
+                  },
+                ].map(({ label, value }) => (
+                  <div
+                    key={label}
+                    style={{
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      padding: "14px 16px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 9,
+                        fontFamily: "var(--font-mono)",
+                        letterSpacing: "0.1em",
+                        color: "var(--muted)",
+                        textTransform: "uppercase",
+                        marginBottom: 6,
+                      }}
+                    >
+                      {label}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 16,
+                        fontFamily: "var(--font-mono)",
+                        fontWeight: 300,
+                        letterSpacing: "-0.03em",
+                        color: "var(--text)",
+                      }}
+                    >
+                      {value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Period returns table */}
+              <div style={{ padding: "0 24px 24px" }}>
+                <div
+                  style={{
+                    fontSize: 9,
+                    fontFamily: "var(--font-mono)",
+                    letterSpacing: "0.1em",
+                    color: "var(--muted)",
+                    textTransform: "uppercase",
+                    marginBottom: 10,
+                  }}
+                >
+                  Period Returns
+                </div>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 2 }}
+                >
+                  {periodReturns.map(({ label, pct, dir }) => (
+                    <div
+                      key={label}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "9px 14px",
+                        background: "var(--surface)",
+                        border: "1px solid var(--border)",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: "var(--font-mono)",
+                          fontSize: 11,
+                          color: "var(--muted)",
+                          letterSpacing: "0.06em",
+                        }}
+                      >
+                        {label}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: "var(--font-mono)",
+                          fontSize: 13,
+                          fontWeight: 400,
+                          letterSpacing: "-0.02em",
+                          color:
+                            pct == null
+                              ? "var(--dim)"
+                              : dir === "up"
+                                ? "oklch(0.72 0.15 155)"
+                                : dir === "down"
+                                  ? "oklch(0.72 0.15 20)"
+                                  : "var(--muted)",
+                        }}
+                      >
+                        {pct == null
+                          ? "—"
+                          : `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`}
+                      </span>
+                      {/* Bar indicator */}
+                      {pct != null && (
+                        <div
+                          style={{
+                            width: 80,
+                            height: 3,
+                            background: "var(--border)",
+                            marginLeft: 12,
+                            position: "relative",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <div
+                            style={{
+                              position: "absolute",
+                              left:
+                                pct < 0
+                                  ? `${50 + Math.max(-50, pct / 2)}%`
+                                  : "50%",
+                              width: `${Math.min(50, Math.abs(pct) / 2)}%`,
+                              height: "100%",
+                              background:
+                                dir === "up"
+                                  ? "oklch(0.72 0.15 155)"
+                                  : "oklch(0.72 0.15 20)",
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div style={{ padding: "0 24px 24px", marginTop: "auto" }}>
+                <div
+                  style={{
+                    paddingTop: 16,
+                    borderTop: "1px solid var(--border)",
+                    fontSize: 10,
+                    fontFamily: "var(--font-mono)",
+                    color: "var(--dim)",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  {metal.name.toUpperCase()} · {metal.unit} · LIVE DATA
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // ─── HEADER ──────────────────────────────────────────────────────────────────
+      function Header({ lastUpdated, isMobile }) {
+        const now = new Date();
+        const dateStr = now.toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+
+        return (
+          <header
+            style={{
+              position: "sticky",
+              top: 0,
+              zIndex: 50,
+              background: "rgba(8,8,9,0.88)",
+              backdropFilter: "blur(12px)",
+              borderBottom: "1px solid var(--border)",
+              padding: isMobile ? "0 16px" : "0 32px",
+              height: isMobile ? 48 : 52,
+              display: "flex",
+              alignItems: "center",
+              gap: isMobile ? 10 : 20,
+            }}
+          >
+            {/* Brand */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: isMobile ? 6 : 10,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "var(--font-sans)",
+                  fontSize: isMobile ? 12 : 13,
+                  fontWeight: 700,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                  color: "var(--text)",
+                }}
+              >
+                Commodities
+              </span>
+              {!isMobile && (
+                <>
+                  <span
+                    style={{
+                      color: "var(--dim)",
+                      fontSize: 12,
+                      fontFamily: "var(--font-mono)",
+                    }}
+                  >
+                    /
+                  </span>
+                  <span
+                    style={{
+                      color: "var(--muted)",
+                      fontSize: 11,
+                      fontFamily: "var(--font-mono)",
+                    }}
+                  >
+                    Market Overview
+                  </span>
+                </>
+              )}
+            </div>
+
+            <div style={{ flex: 1 }} />
+
+            {/* Date — hidden on mobile */}
+            {!isMobile && (
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--muted)",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {dateStr}
+              </span>
+            )}
+
+            {/* Last updated */}
+            {lastUpdated && !isMobile && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--dim)",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                Updated {lastUpdated}
+              </span>
+            )}
+            {lastUpdated && isMobile && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--dim)",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {lastUpdated}
+              </span>
+            )}
+
+            {/* Refresh button removed — server auto-refreshes every 5min. */}
+          </header>
+        );
+      }
+
+      // ─── TICKER TAPE ─────────────────────────────────────────────────────────────
+      function TickerTape({ metals, metalData, allPoints, isMobile }) {
+        const items = metals.map((m) => {
+          const pts = allPoints[m.key] || [];
+          const latest = pts[pts.length - 1]?.v;
+          const change = computeChange(pts);
+          return { m, latest, change };
+        });
+
+        return (
+          <div
+            style={{
+              borderBottom: "1px solid var(--border)",
+              background: "var(--bg)",
+              padding: isMobile ? "0 16px" : "0 32px",
+              height: 36,
+              display: "flex",
+              alignItems: "center",
+              gap: 0,
+              overflowX: "auto",
+              scrollbarWidth: "none",
+            }}
+          >
+            {items.map(({ m, latest, change }, i) => (
+              <React.Fragment key={m.key}>
+                {i > 0 && (
+                  <span
+                    style={{
+                      color: "var(--border-strong)",
+                      margin: "0 16px",
+                      fontSize: 11,
+                    }}
+                  >
+                    |
+                  </span>
+                )}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    flexShrink: 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontFamily: "var(--font-mono)",
+                      letterSpacing: "0.1em",
+                      color: m.cssColor,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {m.symbol}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontFamily: "var(--font-mono)",
+                      fontWeight: 300,
+                      letterSpacing: "-0.02em",
+                      color: "var(--text)",
+                    }}
+                  >
+                    {latest != null ? (
+                      m.fmt(latest)
+                    ) : (
+                      <span
+                        className="skel"
+                        style={{ width: 60, height: 12 }}
+                      />
+                    )}
+                  </span>
+                  {change && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontFamily: "var(--font-mono)",
+                        color:
+                          change.direction === "up"
+                            ? "oklch(0.72 0.15 155)"
+                            : change.direction === "down"
+                              ? "oklch(0.72 0.15 20)"
+                              : "var(--muted)",
+                      }}
+                    >
+                      {change.direction === "up" ? "+" : ""}
+                      {change.pct.toFixed(2)}%
+                    </span>
+                  )}
+                </div>
+              </React.Fragment>
             ))}
           </div>
-        </div>
+        );
+      }
 
-        {/* Footer */}
-        <div style={{ padding:'0 24px 24px', marginTop:'auto' }}>
-          <div style={{ paddingTop:16, borderTop:'1px solid var(--border)', fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.06em' }}>
-            {metal.name.toUpperCase()} · {metal.unit} · LIVE DATA
+      // ─── TIMEFRAME SELECTOR ───────────────────────────────────────────────────────
+      const TF_OPTIONS = [
+        { label: "1D", days: 1 },
+        { label: "5D", days: 5 },
+        { label: "30D", days: 30 },
+        { label: "90D", days: 90 },
+        { label: "1Y", days: 365 },
+        { label: "3Y", days: 1095 },
+        { label: "ALL", days: 0 },
+      ];
+
+      function TimeframeSelector({ value, onChange }) {
+        return (
+          <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+            {TF_OPTIONS.map((o) => (
+              <button
+                key={o.label}
+                onClick={() => onChange(o.days)}
+                style={{
+                  background: value === o.days ? "var(--dim)" : "none",
+                  border:
+                    "1px solid " +
+                    (value === o.days ? "var(--border-strong)" : "transparent"),
+                  color: value === o.days ? "var(--text)" : "var(--muted)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 10,
+                  letterSpacing: "0.08em",
+                  padding: "4px 9px",
+                  cursor: "pointer",
+                  transition: "all 0.12s",
+                }}
+              >
+                {o.label}
+              </button>
+            ))}
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+        );
+      }
 
-// ─── HEADER ──────────────────────────────────────────────────────────────────
-function Header({ lastUpdated, onRefresh, refreshing, isMobile }) {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric', year:'numeric' });
-
-  return (
-    <header style={{
-      position:     'sticky',
-      top:          0,
-      zIndex:       50,
-      background:   'rgba(8,8,9,0.88)',
-      backdropFilter: 'blur(12px)',
-      borderBottom: '1px solid var(--border)',
-      padding:      isMobile ? '0 16px' : '0 32px',
-      height:       isMobile ? 48 : 52,
-      display:      'flex',
-      alignItems:   'center',
-      gap:          isMobile ? 10 : 20,
-    }}>
-      {/* Brand */}
-      <div style={{ display:'flex', alignItems:'baseline', gap: isMobile ? 6 : 10 }}>
-        <span style={{
-          fontFamily: 'var(--font-sans)',
-          fontSize:   isMobile ? 12 : 13,
-          fontWeight: 700,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          color:      'var(--text)',
-        }}>Commodities</span>
-        {!isMobile && <>
-          <span style={{ color:'var(--dim)', fontSize:12, fontFamily:'var(--font-mono)' }}>/</span>
-          <span style={{ color:'var(--muted)', fontSize:11, fontFamily:'var(--font-mono)' }}>Market Overview</span>
-        </>}
-      </div>
-
-      <div style={{ flex:1 }} />
-
-      {/* Date — hidden on mobile */}
-      {!isMobile && (
-        <span style={{ fontSize:11, fontFamily:'var(--font-mono)', color:'var(--muted)', letterSpacing:'0.04em' }}>
-          {dateStr}
-        </span>
-      )}
-
-      {/* Last updated */}
-      {lastUpdated && !isMobile && (
-        <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.04em' }}>
-          Updated {lastUpdated}
-        </span>
-      )}
-      {lastUpdated && isMobile && (
-        <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.04em' }}>
-          {lastUpdated}
-        </span>
-      )}
-
-      {/* Refresh */}
-      <button
-        onClick={onRefresh}
-        disabled={refreshing}
-        style={{
-          background:   'none',
-          border:       '1px solid var(--border)',
-          color:        refreshing ? 'var(--dim)' : 'var(--muted)',
-          fontFamily:   'var(--font-mono)',
-          fontSize:     10,
-          letterSpacing:'0.08em',
-          textTransform:'uppercase',
-          padding:      isMobile ? '5px 10px' : '5px 12px',
-          cursor:       refreshing ? 'not-allowed' : 'pointer',
-          transition:   'color 0.15s, border-color 0.15s',
-          display:      'flex',
-          alignItems:   'center',
-          gap:          6,
-        }}
-        onMouseEnter={e => { if (!refreshing) { e.target.style.color = 'var(--text)'; e.target.style.borderColor = 'var(--border-strong)'; }}}
-        onMouseLeave={e => { e.target.style.color = 'var(--muted)'; e.target.style.borderColor = 'var(--border)'; }}
-      >
-        <span style={{ display:'inline-block', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>↻</span>
-        {!isMobile && 'Refresh'}
-      </button>
-    </header>
-  );
-}
-
-// ─── TICKER TAPE ─────────────────────────────────────────────────────────────
-function TickerTape({ metals, metalData, allPoints, isMobile }) {
-  const items = metals.map(m => {
-    const pts    = allPoints[m.key] || [];
-    const latest = pts[pts.length - 1]?.v;
-    const change = computeChange(pts);
-    return { m, latest, change };
-  });
-
-  return (
-    <div style={{
-      borderBottom: '1px solid var(--border)',
-      background:   'var(--bg)',
-      padding:      isMobile ? '0 16px' : '0 32px',
-      height:       36,
-      display:      'flex',
-      alignItems:   'center',
-      gap:          0,
-      overflowX:    'auto',
-      scrollbarWidth: 'none',
-    }}>
-      {items.map(({ m, latest, change }, i) => (
-        <React.Fragment key={m.key}>
-          {i > 0 && <span style={{ color:'var(--border-strong)', margin:'0 16px', fontSize:11 }}>|</span>}
-          <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
-            <span style={{
-              fontSize:    10,
-              fontFamily:  'var(--font-mono)',
-              letterSpacing:'0.1em',
-              color:       m.cssColor,
-              fontWeight:  500,
-            }}>{m.symbol}</span>
-            <span style={{
-              fontSize:    12,
-              fontFamily:  'var(--font-mono)',
-              fontWeight:  300,
-              letterSpacing:'-0.02em',
-              color:       'var(--text)',
-            }}>
-              {latest != null ? m.fmt(latest) : <span className="skel" style={{ width:60, height:12 }} />}
+      // ─── SECTION LABEL ────────────────────────────────────────────────────────────
+      function SectionLabel({ text, sub }) {
+        return (
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+            <span
+              style={{
+                fontSize: 10,
+                fontFamily: "var(--font-mono)",
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                color: "var(--muted)",
+                fontWeight: 500,
+              }}
+            >
+              {text}
             </span>
-            {change && (
-              <span style={{
-                fontSize:  10,
-                fontFamily:'var(--font-mono)',
-                color:     change.direction === 'up'   ? 'oklch(0.72 0.15 155)'
-                         : change.direction === 'down'  ? 'oklch(0.72 0.15 20)'
-                         : 'var(--muted)',
-              }}>
-                {change.direction === 'up' ? '+' : ''}{change.pct.toFixed(2)}%
+            {sub && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--dim)",
+                }}
+              >
+                {sub}
               </span>
             )}
           </div>
-        </React.Fragment>
-      ))}
-    </div>
-  );
-}
-
-// ─── TIMEFRAME SELECTOR ───────────────────────────────────────────────────────
-const TF_OPTIONS = [
-  { label:'1D',  days:1 },
-  { label:'5D',  days:5 },
-  { label:'30D', days:30 },
-  { label:'90D', days:90 },
-  { label:'1Y',  days:365 },
-  { label:'3Y',  days:1095 },
-  { label:'ALL', days:0 },
-];
-
-function TimeframeSelector({ value, onChange }) {
-  return (
-    <div style={{ display:'flex', gap:2, alignItems:'center' }}>
-      {TF_OPTIONS.map(o => (
-        <button
-          key={o.label}
-          onClick={() => onChange(o.days)}
-          style={{
-            background:    value === o.days ? 'var(--dim)' : 'none',
-            border:        '1px solid ' + (value === o.days ? 'var(--border-strong)' : 'transparent'),
-            color:         value === o.days ? 'var(--text)' : 'var(--muted)',
-            fontFamily:    'var(--font-mono)',
-            fontSize:      10,
-            letterSpacing: '0.08em',
-            padding:       '4px 9px',
-            cursor:        'pointer',
-            transition:    'all 0.12s',
-          }}
-        >{o.label}</button>
-      ))}
-    </div>
-  );
-}
-
-// ─── SECTION LABEL ────────────────────────────────────────────────────────────
-function SectionLabel({ text, sub }) {
-  return (
-    <div style={{ display:'flex', alignItems:'baseline', gap:10 }}>
-      <span style={{
-        fontSize:    10,
-        fontFamily:  'var(--font-mono)',
-        letterSpacing:'0.12em',
-        textTransform:'uppercase',
-        color:       'var(--muted)',
-        fontWeight:  500,
-      }}>{text}</span>
-      {sub && <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)' }}>{sub}</span>}
-    </div>
-  );
-}
-
-// ─── MAIN APP ─────────────────────────────────────────────────────────────────
-function App() {
-  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
-  const [rawData,  setRawData]  = useState(null);
-  const [timeframe, setTimeframe] = useState(365);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [expandedKey, setExpandedKey] = useState(null);
-  const [newsData, setNewsData] = useState(null);
-  const [appVersion, setAppVersion] = useState(null);
-  const windowWidth = useWindowWidth();
-  const isMobile = windowWidth < 640;
-
-  useEffect(() => {
-    loadData()
-      .then(d => {
-        setRawData(d);
-        setLoading(false);
-        const pts = d?.symbols?.XAU || [];
-        if (pts.length) {
-          const last = pts[pts.length - 1];
-          setLastUpdated(new Date(last.t).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }));
-        }
-      })
-      .catch(() => setLoading(false));
-
-    fetch('/api/news')
-      .then(r => r.json())
-      .then(d => setNewsData(d))
-      .catch(() => setNewsData({ items: [], configured: true }));
-
-    fetch('/api/version')
-      .then(r => r.json())
-      .then(d => setAppVersion(d.version))
-      .catch(() => {});
-  }, []);
-
-  const allPoints = useMemo(() => {
-    if (!rawData) return {};
-    const out = {};
-    METALS.forEach(m => {
-      out[m.key] = getPoints(rawData, m.key, timeframe);
-    });
-    return out;
-  }, [rawData, timeframe]);
-
-  const allRawPoints = useMemo(() => {
-    if (!rawData) return {};
-    const out = {};
-    METALS.forEach(m => { out[m.key] = getPoints(rawData, m.key, 0); });
-    return out;
-  }, [rawData]);
-
-  const allChanges = useMemo(() => {
-    const out = {};
-    METALS.forEach(m => { out[m.key] = computeChange(allPoints[m.key]); });
-    return out;
-  }, [allPoints]);
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await fetch('/api/refresh', { method: 'POST' });
-      const d = await loadData();
-      setRawData(d);
-      const pts = d?.symbols?.XAU || [];
-      if (pts.length) {
-        const last = pts[pts.length - 1];
-        setLastUpdated(new Date(last.t).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }));
+        );
       }
-    } catch(e) {}
-    finally { setRefreshing(false); }
-  }, []);
 
-  // Layout variants
-  const isEditorial = tweaks.layout === 'editorial';
-  const isDense = tweaks.density === 'compact';
+      // ─── MAIN APP ─────────────────────────────────────────────────────────────────
+      function App() {
+        const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+        const [rawData, setRawData] = useState(null);
+        const [timeframe, setTimeframe] = useState(365);
+        const [lastUpdated, setLastUpdated] = useState(null);
+        const [loading, setLoading] = useState(true);
+        const [expandedKey, setExpandedKey] = useState(null);
+        const [newsData, setNewsData] = useState(null);
+        const [appVersion, setAppVersion] = useState(null);
+        const windowWidth = useWindowWidth();
+        const isMobile = windowWidth < 640;
 
-  // Hero metal driven by tweaks
-  const heroKey   = tweaks.heroMetal || 'NI';
-  const heroMetal = METALS.find(m => m.key === heroKey) || METALS[0];
-  const restMetals = METALS.filter(m => m.key !== heroKey);
-  // Split rest into precious (XAU,XAG,XPT,XPD) and industrial (XCU,NI,XCO,BRL)
-  const PRECIOUS_KEYS = ['XAU','XAG','XPT','XPD'];
-  const preciousRest  = restMetals.filter(m => PRECIOUS_KEYS.includes(m.key));
-  // Always include ALL non-precious metals in the grid, even if one is the hero
-  const industrial    = METALS.filter(m => !PRECIOUS_KEYS.includes(m.key));
+        useEffect(() => {
+          loadData()
+            .then((d) => {
+              setRawData(d);
+              setLoading(false);
+              const pts = d?.symbols?.XAU || [];
+              if (pts.length) {
+                const last = pts[pts.length - 1];
+                setLastUpdated(
+                  new Date(last.t).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  }),
+                );
+              }
+            })
+            .catch(() => setLoading(false));
 
-  // Expanded detail
-  const expandedMetal = expandedKey ? METALS.find(m => m.key === expandedKey) : null;
+          fetch("/api/news")
+            .then((r) => r.json())
+            .then((d) => setNewsData(d))
+            .catch(() => setNewsData({ items: [], configured: true }));
 
-  return (
-    <div style={{ minHeight:'100vh', background: tweaks.colorScheme === 'light' ? '#f5f4f2' : 'var(--bg)' }}>
-      <style>{`
+          fetch("/api/version")
+            .then((r) => r.json())
+            .then((d) => setAppVersion(d.version))
+            .catch(() => {});
+        }, []);
+
+        const allPoints = useMemo(() => {
+          if (!rawData) return {};
+          const out = {};
+          METALS.forEach((m) => {
+            out[m.key] = getPoints(rawData, m.key, timeframe);
+          });
+          return out;
+        }, [rawData, timeframe]);
+
+        const allRawPoints = useMemo(() => {
+          if (!rawData) return {};
+          const out = {};
+          METALS.forEach((m) => {
+            out[m.key] = getPoints(rawData, m.key, 0);
+          });
+          return out;
+        }, [rawData]);
+
+        const allChanges = useMemo(() => {
+          const out = {};
+          METALS.forEach((m) => {
+            out[m.key] = computeChange(allPoints[m.key]);
+          });
+          return out;
+        }, [allPoints]);
+
+        // handleRefresh removed — server auto-refreshes every 5min (see deploy
+        // env METALPRICE_REFRESH_MINUTES). The button it powered is gone too.
+
+        // Layout variants
+        const isEditorial = tweaks.layout === "editorial";
+        const isDense = tweaks.density === "compact";
+
+        // Hero metal driven by tweaks
+        const heroKey = tweaks.heroMetal || "NI";
+        const heroMetal = METALS.find((m) => m.key === heroKey) || METALS[0];
+        const restMetals = METALS.filter((m) => m.key !== heroKey);
+        // Split rest into precious (XAU,XAG,XPT,XPD) and industrial (XCU,NI,XCO,BRL)
+        const PRECIOUS_KEYS = ["XAU", "XAG", "XPT", "XPD"];
+        const preciousRest = restMetals.filter((m) =>
+          PRECIOUS_KEYS.includes(m.key),
+        );
+        // Always include ALL non-precious metals in the grid, even if one is the hero
+        const industrial = METALS.filter((m) => !PRECIOUS_KEYS.includes(m.key));
+
+        // Expanded detail
+        const expandedMetal = expandedKey
+          ? METALS.find((m) => m.key === expandedKey)
+          : null;
+
+        return (
+          <div
+            style={{
+              minHeight: "100vh",
+              background:
+                tweaks.colorScheme === "light" ? "#f5f4f2" : "var(--bg)",
+            }}
+          >
+            <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
 
-      <Header lastUpdated={lastUpdated} onRefresh={handleRefresh} refreshing={refreshing} isMobile={isMobile} />
-      <TickerTape metals={METALS} allPoints={allPoints} isMobile={isMobile} />
-
-      {/* Main content */}
-      <main style={{ maxWidth:1440, margin:'0 auto', padding: isMobile ? '16px' : isDense ? '20px 24px' : '28px 32px' }}>
-
-        {/* Controls row */}
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: isMobile ? 12 : isDense ? 16 : 24, flexWrap: isMobile ? 'wrap' : 'nowrap', gap: 8 }}>
-          <SectionLabel text="Spot Prices" sub={`— ${timeframe === 0 ? 'All time' : timeframe + 'd window'}`} />
-          <TimeframeSelector value={timeframe} onChange={setTimeframe} />
-        </div>
-
-        {isEditorial ? (
-          /* ─── EDITORIAL LAYOUT ─── */
-          <div style={{ display:'flex', flexDirection:'column', gap: isMobile ? 10 : isDense ? 12 : 16 }}>
-
-            {/* Hero row */}
-            <HeroCard
-              metal={heroMetal}
-              points={allPoints[heroMetal.key]}
-              change={allChanges[heroMetal.key]}
-              tweaks={tweaks}
-              onExpand={() => setExpandedKey(heroMetal.key)}
+            <Header lastUpdated={lastUpdated} isMobile={isMobile} />
+            <TickerTape
+              metals={METALS}
+              allPoints={allPoints}
               isMobile={isMobile}
-              timeframe={timeframe}
             />
 
-            {/* Precious metals grid */}
-            {preciousRest.length > 0 && (
-              <div>
-                <div style={{ marginBottom: isDense ? 8 : 12 }}>
-                  <SectionLabel text="Precious Metals" />
-                </div>
-                <div style={{
-                  display:'grid',
-                  gridTemplateColumns: isMobile
-                    ? 'repeat(2, 1fr)'
-                    : `repeat(${Math.min(preciousRest.length, 4)}, 1fr)`,
-                  gap: isMobile ? 8 : isDense ? 8 : 12,
-                }}>
-                  {preciousRest.map(m => (
-                    <CompactCard
-                      key={m.key}
-                      metal={m}
-                      points={allPoints[m.key]}
-                      change={allChanges[m.key]}
-                      tweaks={tweaks}
-                      dense={isMobile || isDense}
-                      onExpand={() => setExpandedKey(m.key)}
-                    />
-                  ))}
-                </div>
+            {/* Main content */}
+            <main
+              style={{
+                maxWidth: 1440,
+                margin: "0 auto",
+                padding: isMobile
+                  ? "16px"
+                  : isDense
+                    ? "20px 24px"
+                    : "28px 32px",
+              }}
+            >
+              {/* Controls row */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: isMobile ? 12 : isDense ? 16 : 24,
+                  flexWrap: isMobile ? "wrap" : "nowrap",
+                  gap: 8,
+                }}
+              >
+                <SectionLabel
+                  text="Spot Prices"
+                  sub={`— ${timeframe === 0 ? "All time" : timeframe + "d window"}`}
+                />
+                <TimeframeSelector value={timeframe} onChange={setTimeframe} />
               </div>
-            )}
 
-            {/* Industrial + FX grid */}
-            {industrial.length > 0 && (
-              <div>
-                <div style={{ marginBottom: isDense ? 8 : 12 }}>
-                  <SectionLabel text="Industrial &amp; FX" />
+              {isEditorial ? (
+                /* ─── EDITORIAL LAYOUT ─── */
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: isMobile ? 10 : isDense ? 12 : 16,
+                  }}
+                >
+                  {/* Hero row */}
+                  <HeroCard
+                    metal={heroMetal}
+                    points={allPoints[heroMetal.key]}
+                    change={allChanges[heroMetal.key]}
+                    tweaks={tweaks}
+                    onExpand={() => setExpandedKey(heroMetal.key)}
+                    isMobile={isMobile}
+                    timeframe={timeframe}
+                  />
+
+                  {/* Precious metals grid */}
+                  {preciousRest.length > 0 && (
+                    <div>
+                      <div style={{ marginBottom: isDense ? 8 : 12 }}>
+                        <SectionLabel text="Precious Metals" />
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: isMobile
+                            ? "repeat(2, 1fr)"
+                            : `repeat(${Math.min(preciousRest.length, 4)}, 1fr)`,
+                          gap: isMobile ? 8 : isDense ? 8 : 12,
+                        }}
+                      >
+                        {preciousRest.map((m) => (
+                          <CompactCard
+                            key={m.key}
+                            metal={m}
+                            points={allPoints[m.key]}
+                            change={allChanges[m.key]}
+                            tweaks={tweaks}
+                            dense={isMobile || isDense}
+                            onExpand={() => setExpandedKey(m.key)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Industrial + FX grid */}
+                  {industrial.length > 0 && (
+                    <div>
+                      <div style={{ marginBottom: isDense ? 8 : 12 }}>
+                        <SectionLabel text="Industrial &amp; FX" />
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: isMobile
+                            ? "repeat(2, 1fr)"
+                            : `repeat(${Math.min(industrial.length, 4)}, 1fr)`,
+                          gap: isMobile ? 8 : isDense ? 8 : 12,
+                        }}
+                      >
+                        {industrial.map((m) => (
+                          <CompactCard
+                            key={m.key}
+                            metal={m}
+                            points={allPoints[m.key]}
+                            change={allChanges[m.key]}
+                            tweaks={tweaks}
+                            dense={isMobile || isDense}
+                            onExpand={() => setExpandedKey(m.key)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div style={{
-                  display:'grid',
-                  gridTemplateColumns: isMobile
-                    ? 'repeat(2, 1fr)'
-                    : `repeat(${Math.min(industrial.length, 4)}, 1fr)`,
-                  gap: isMobile ? 8 : isDense ? 8 : 12,
-                }}>
-                  {industrial.map(m => (
+              ) : (
+                /* ─── UNIFORM GRID LAYOUT ─── */
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isMobile
+                      ? "repeat(2, 1fr)"
+                      : "repeat(auto-fill, minmax(280px, 1fr))",
+                    gap: isMobile ? 8 : isDense ? 8 : 12,
+                  }}
+                >
+                  {METALS.map((m) => (
                     <CompactCard
                       key={m.key}
                       metal={m}
@@ -1293,98 +2164,125 @@ function App() {
                     />
                   ))}
                 </div>
+              )}
+
+              {/* News feed */}
+              <NewsFeed newsData={newsData} isMobile={isMobile} />
+
+              {/* Footer */}
+              <div
+                style={{
+                  marginTop: 40,
+                  paddingTop: 20,
+                  borderTop: "1px solid var(--border)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontFamily: "var(--font-mono)",
+                    color: "var(--dim)",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  DATA — METALPRICE.IO · LIVE
+                </span>
+                {appVersion && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontFamily: "var(--font-mono)",
+                      color: "var(--muted)",
+                      letterSpacing: "0.06em",
+                    }}
+                  >
+                    v{appVersion}
+                  </span>
+                )}
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontFamily: "var(--font-mono)",
+                    color: "var(--dim)",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  PRICES IN USD · NOT FINANCIAL ADVICE
+                </span>
               </div>
-            )}
-          </div>
-        ) : (
-          /* ─── UNIFORM GRID LAYOUT ─── */
-          <div style={{
-            display:'grid',
-            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(280px, 1fr))',
-            gap: isMobile ? 8 : isDense ? 8 : 12,
-          }}>
-            {METALS.map(m => (
-              <CompactCard
-                key={m.key}
-                metal={m}
-                points={allPoints[m.key]}
-                change={allChanges[m.key]}
+            </main>
+
+            {/* Detail panel */}
+            {expandedMetal && (
+              <DetailPanel
+                metal={expandedMetal}
+                points={allRawPoints[expandedMetal.key]}
+                change={allChanges[expandedMetal.key]}
+                onClose={() => setExpandedKey(null)}
                 tweaks={tweaks}
-                dense={isMobile || isDense}
-                onExpand={() => setExpandedKey(m.key)}
+                isMobile={isMobile}
               />
-            ))}
+            )}
+
+            {/* Tweaks panel */}
+            <TweaksPanel>
+              <TweakSection label="Featured Metal" />
+              <TweakSelect
+                label="Hero metal"
+                value={tweaks.heroMetal}
+                options={METALS.map((m) => ({ value: m.key, label: m.name }))}
+                onChange={(v) => setTweak("heroMetal", v)}
+              />
+              <TweakSection label="Layout" />
+              <TweakRadio
+                id="layout"
+                label="Layout style"
+                options={[
+                  { value: "editorial", label: "Editorial" },
+                  { value: "grid", label: "Grid" },
+                ]}
+                value={tweaks.layout}
+                onChange={(v) => setTweak("layout", v)}
+              />
+              <TweakRadio
+                id="density"
+                label="Density"
+                options={[
+                  { value: "comfortable", label: "Comfortable" },
+                  { value: "compact", label: "Compact" },
+                ]}
+                value={tweaks.density}
+                onChange={(v) => setTweak("density", v)}
+              />
+              <TweakSection label="Charts" />
+              <TweakRadio
+                id="chartStyle"
+                label="Chart style"
+                options={[
+                  { value: "area", label: "Area" },
+                  { value: "line", label: "Line" },
+                  { value: "bar", label: "Bar" },
+                ]}
+                value={tweaks.chartStyle}
+                onChange={(v) => setTweak("chartStyle", v)}
+              />
+              <TweakSection label="Display" />
+              <TweakToggle
+                id="showChange"
+                label="Show % change"
+                value={tweaks.showChange}
+                onChange={(v) => setTweak("showChange", v)}
+              />
+            </TweaksPanel>
           </div>
-        )}
+        );
+      }
 
-        {/* News feed */}
-        <NewsFeed newsData={newsData} isMobile={isMobile} />
-
-        {/* Footer */}
-        <div style={{
-          marginTop:   40,
-          paddingTop:  20,
-          borderTop:   '1px solid var(--border)',
-          display:     'flex',
-          justifyContent:'space-between',
-          alignItems:  'center',
-        }}>
-          <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.06em' }}>
-            DATA — METALPRICE.IO · LIVE
-          </span>
-          {appVersion && (
-            <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--muted)', letterSpacing:'0.06em' }}>
-              v{appVersion}
-            </span>
-          )}
-          <span style={{ fontSize:10, fontFamily:'var(--font-mono)', color:'var(--dim)', letterSpacing:'0.06em' }}>
-            PRICES IN USD · NOT FINANCIAL ADVICE
-          </span>
-        </div>
-      </main>
-
-      {/* Detail panel */}
-      {expandedMetal && (
-        <DetailPanel
-          metal={expandedMetal}
-          points={allRawPoints[expandedMetal.key]}
-          change={allChanges[expandedMetal.key]}
-          onClose={() => setExpandedKey(null)}
-          tweaks={tweaks}
-          isMobile={isMobile}
-        />
-      )}
-
-      {/* Tweaks panel */}
-      <TweaksPanel>
-        <TweakSection label="Featured Metal" />
-        <TweakSelect
-          label="Hero metal"
-          value={tweaks.heroMetal}
-          options={METALS.map(m => ({ value: m.key, label: m.name }))}
-          onChange={v => setTweak('heroMetal', v)}
-        />
-        <TweakSection label="Layout" />
-        <TweakRadio id="layout" label="Layout style"
-          options={[{value:'editorial',label:'Editorial'},{value:'grid',label:'Grid'}]}
-          value={tweaks.layout} onChange={v => setTweak('layout', v)} />
-        <TweakRadio id="density" label="Density"
-          options={[{value:'comfortable',label:'Comfortable'},{value:'compact',label:'Compact'}]}
-          value={tweaks.density} onChange={v => setTweak('density', v)} />
-        <TweakSection label="Charts" />
-        <TweakRadio id="chartStyle" label="Chart style"
-          options={[{value:'area',label:'Area'},{value:'line',label:'Line'},{value:'bar',label:'Bar'}]}
-          value={tweaks.chartStyle} onChange={v => setTweak('chartStyle', v)} />
-        <TweakSection label="Display" />
-        <TweakToggle id="showChange" label="Show % change"
-          value={tweaks.showChange} onChange={v => setTweak('showChange', v)} />
-      </TweaksPanel>
-    </div>
-  );
-}
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
-</script>
-</body>
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
 </html>
