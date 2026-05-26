@@ -626,20 +626,40 @@ setInterval(() => {
       }
     }
 
+    // Per-chunk try/catch: a single failing chunk (timeout, !res.ok, network
+    // error) must NOT kill the entire seed. Without this, fetchTimeframe
+    // throwing on any chunk propagates to the outer catch and leaves
+    // seedComplete=false with zero historical data. Hit by audit finding #6
+    // and root cause of the May 26 second-deploy outage.
+    let failedChunks = 0;
     for (let i = 0; i < ranges.length; i++) {
       const [start, end] = ranges[i]!;
-      const tf = await client.fetchTimeframe({
-        start_date: fmt(start),
-        end_date: fmt(end),
-        base: "USD",
-        currencies: symbols,
-      });
-      if (!tf.success || !tf.rates) {
-        console.error(`❌ Chunk ${fmt(start)}→${fmt(end)} failed:`, tf.error);
-      } else {
-        ingestChunk(tf.rates);
+      try {
+        const tf = await client.fetchTimeframe({
+          start_date: fmt(start),
+          end_date: fmt(end),
+          base: "USD",
+          currencies: symbols,
+        });
+        if (!tf.success || !tf.rates) {
+          failedChunks++;
+          console.error(`❌ Chunk ${fmt(start)}→${fmt(end)} failed:`, tf.error);
+        } else {
+          ingestChunk(tf.rates);
+        }
+      } catch (e: any) {
+        failedChunks++;
+        console.error(
+          `❌ Chunk ${fmt(start)}→${fmt(end)} threw:`,
+          e?.message ?? e,
+        );
       }
       if (i < ranges.length - 1) await new Promise((r) => setTimeout(r, 500));
+    }
+    if (failedChunks > 0) {
+      console.warn(
+        `⚠️  Seed completed with ${failedChunks}/${ranges.length} chunks failed — chart may have gaps`,
+      );
     }
 
     // Sort, dedupe by day-timestamp, and cap to MAX_SERIES_POINTS.
@@ -667,6 +687,9 @@ setInterval(() => {
     });
   } catch (err) {
     console.error("❌ seedHistory failed:", err);
+    // Audit finding #12: flip the flag even on failure so the frontend's
+    // seedPending UI doesn't stay true forever.
+    seedComplete = true;
   }
 })();
 
