@@ -617,6 +617,15 @@ scheduleNextRefresh(REFRESH_INTERVAL_MS);
 // Seed timeseries with historical data on startup. Fetches only missing date ranges
 // (backfill + top-up) to avoid re-hitting the API for data already on disk.
 (async function seedHistory() {
+  // Wait for the initial refresh to settle before hammering the API with the
+  // seed. Without this, both run concurrently at module load and the seed
+  // can starve the live refresh of bandwidth on Cloud Run — observed
+  // 2026-05-26 as a 25s hard-timeout on fetchLatest while the seed was
+  // running 5 concurrent timeframe chunks. `ready` resolves after the
+  // initial refresh OR the 10s grace, whichever comes first.
+  await ready.catch(() => {
+    /* boot anyway */
+  });
   try {
     const SEED_DEPTH_DAYS = config.seedDepthDays;
     const CHUNK_DAYS = 365; // MetalpriceAPI timeframe max window per call
