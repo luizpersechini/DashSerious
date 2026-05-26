@@ -64,7 +64,9 @@ export class MetalpriceClient {
         "Content-Type": "application/json",
         "X-API-KEY": this.apiKey,
       },
-      signal: AbortSignal.timeout(8000),
+      // 20s: Cloud Run southamerica-east1 → metalpriceapi can occasionally
+      // exceed 8s during upstream slowdowns. See commit 46891be context.
+      signal: AbortSignal.timeout(20000),
     });
     if (!res.ok) {
       throw new Error(`metalprice latest failed: ${res.status}`);
@@ -126,7 +128,8 @@ export async function fetchChange(params: {
       "Content-Type": "application/json",
       "X-API-KEY": metalpriceApiKey,
     },
-    signal: AbortSignal.timeout(8000),
+    // 20s: same rationale as fetchLatest above.
+    signal: AbortSignal.timeout(20000),
   });
   if (!res.ok) {
     throw new Error(`metalprice change failed: ${res.status}`);

@@ -61,6 +61,11 @@ jobs:
           METALPRICE_API_BASE: https://api.metalpriceapi.com/v1
           METALPRICE_PLAN: essential
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+          # Optional — leave the GitHub secrets unset for current behavior:
+          #   REFRESH_TOKEN unset  → /api/refresh stays anonymous (existing prod behavior)
+          #   CORS_ALLOW_ORIGINS unset → server enters same-origin-only mode
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+          CORS_ALLOW_ORIGINS: ${{ secrets.CORS_ALLOW_ORIGINS }}
         run: |
           gcloud run deploy $SERVICE_NAME \
             --image $REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:${{ github.sha }} \
@@ -69,4 +74,4 @@ jobs:
             --allow-unauthenticated \
             --service-account $RUNTIME_SA \
             --min-instances 1 \
-            --set-env-vars METALPRICE_API_KEY=$METALPRICE_API_KEY,METALPRICE_API_BASE=$METALPRICE_API_BASE,METALPRICE_PLAN=$METALPRICE_PLAN,NEWS_API_KEY=$NEWS_API_KEY
+            --update-env-vars METALPRICE_API_KEY=$METALPRICE_API_KEY,METALPRICE_API_BASE=$METALPRICE_API_BASE,METALPRICE_PLAN=$METALPRICE_PLAN,NEWS_API_KEY=$NEWS_API_KEY,REFRESH_TOKEN=$REFRESH_TOKEN,CORS_ALLOW_ORIGINS=$CORS_ALLOW_ORIGINS
