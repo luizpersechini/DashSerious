@@ -34,6 +34,34 @@ export type ChangeResponse = {
   error?: { code: number; info: string };
 };
 
+// Promise.race manual-timer backstop. AbortSignal.timeout in undici (Node fetch)
+// occasionally misses the response stream phase, so a hung fetch never aborts
+// and the caller hangs forever. This wrapper guarantees an eventual rejection
+// regardless of fetch-layer behavior. Observed in production 2026-05-26 on
+// both fetchLatest (wedged coalesceRefresh) and fetchTimeframe (wedged seed).
+function withHardTimeout<T>(
+  work: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${label} hard timeout (${ms}ms)`)),
+      ms,
+    );
+    work.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 export class MetalpriceClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -51,6 +79,14 @@ export class MetalpriceClient {
       math?: string;
     } = {},
   ): Promise<LatestRatesResponse> {
+    return withHardTimeout(this._fetchLatest(params), 25000, "fetchLatest");
+  }
+
+  private async _fetchLatest(params: {
+    base?: string;
+    currencies?: string[];
+    math?: string;
+  }): Promise<LatestRatesResponse> {
     const url = new URL(`${this.baseUrl}/latest`);
     url.searchParams.set("api_key", this.apiKey);
     if (params.base) url.searchParams.set("base", params.base);
@@ -64,20 +100,30 @@ export class MetalpriceClient {
         "Content-Type": "application/json",
         "X-API-KEY": this.apiKey,
       },
-      // 20s: Cloud Run southamerica-east1 → metalpriceapi can occasionally
-      // exceed 8s during upstream slowdowns. See commit 46891be context.
       signal: AbortSignal.timeout(20000),
     });
     if (!res.ok) {
       throw new Error(`metalprice latest failed: ${res.status}`);
     }
-    const data = (await res.json()) as LatestRatesResponse;
-    return data;
+    return (await res.json()) as LatestRatesResponse;
   }
 
   async fetchTimeframe(params: {
-    start_date: string; // YYYY-MM-DD
-    end_date: string; // YYYY-MM-DD
+    start_date: string;
+    end_date: string;
+    base?: string;
+    currencies?: string[];
+  }): Promise<TimeframeResponse> {
+    return withHardTimeout(
+      this._fetchTimeframe(params),
+      70000,
+      "fetchTimeframe",
+    );
+  }
+
+  private async _fetchTimeframe(params: {
+    start_date: string;
+    end_date: string;
     base?: string;
     currencies?: string[];
   }): Promise<TimeframeResponse> {
@@ -94,20 +140,26 @@ export class MetalpriceClient {
         "Content-Type": "application/json",
         "X-API-KEY": this.apiKey,
       },
-      // Heavier endpoint (up to 365d × 12 symbols payload). Cloud Run egress
-      // from southamerica-east1 routinely exceeds 8s — bump to 60s so seed
-      // chunks don't silently AbortError.
       signal: AbortSignal.timeout(60000),
     });
     if (!res.ok) {
       throw new Error(`metalprice timeframe failed: ${res.status}`);
     }
-    const data = (await res.json()) as TimeframeResponse;
-    return data;
+    return (await res.json()) as TimeframeResponse;
   }
 }
 
-export async function fetchChange(params: {
+export function fetchChange(params: {
+  start_date?: string;
+  end_date?: string;
+  date_type?: "recent" | "yesterday" | "week" | "month" | "year";
+  base?: string;
+  currencies?: string[];
+}): Promise<ChangeResponse> {
+  return withHardTimeout(_fetchChange(params), 25000, "fetchChange");
+}
+
+async function _fetchChange(params: {
   start_date?: string;
   end_date?: string;
   date_type?: "recent" | "yesterday" | "week" | "month" | "year";
@@ -128,7 +180,6 @@ export async function fetchChange(params: {
       "Content-Type": "application/json",
       "X-API-KEY": metalpriceApiKey,
     },
-    // 20s: same rationale as fetchLatest above.
     signal: AbortSignal.timeout(20000),
   });
   if (!res.ok) {
