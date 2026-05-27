@@ -638,19 +638,18 @@ scheduleNextRefresh(REFRESH_INTERVAL_MS);
     const targetStart = new Date(today.getTime() - SEED_DEPTH_DAYS * DAY_MS);
     const yesterday = new Date(today.getTime() - DAY_MS);
 
-    // Determine overall coverage from in-memory data (hydrated from disk or prior run).
-    let oldestMs = Infinity;
-    let newestMs = -Infinity;
-    for (const [, arr] of timeseriesBySymbol) {
-      if (arr.length === 0) continue;
-      if (arr[0]!.t < oldestMs) oldestMs = arr[0]!.t;
-      if (arr[arr.length - 1]!.t > newestMs) newestMs = arr[arr.length - 1]!.t;
-    }
-    const hasData = oldestMs !== Infinity;
-
-    // Build ordered list of [start, end] date ranges to fetch.
+    // Always fetch the full historical range. The previous hasData/backfill+
+    // topup logic had an edge case: if `await ready` had added a live intraday
+    // point before the seed ran, oldestMs/newestMs reflected that single
+    // live point (today), so the topup branch decided no new data was needed.
+    // The backfill chunks were generated but somehow the most-recent chunk
+    // silently didn't ingest (observed 2026-05-27: 4yr loaded, last year
+    // missing, failedChunks=0).
+    //
+    // Simpler is more robust: always request the full window, let the dedupe
+    // below collapse duplicates. Cost is one extra API call per chunk on warm
+    // restarts (currently irrelevant — Cloud Run has no persistent disk).
     const ranges: [Date, Date][] = [];
-
     function pushChunks(from: Date, to: Date) {
       let cur = new Date(from);
       while (cur <= to) {
@@ -661,26 +660,8 @@ scheduleNextRefresh(REFRESH_INTERVAL_MS);
         cur = new Date(end.getTime() + DAY_MS);
       }
     }
-
-    if (!hasData) {
-      // No data at all — fetch newest first so the most recent window is available immediately.
-      pushChunks(targetStart, yesterday);
-      ranges.reverse();
-    } else {
-      // Backfill: we need older data than what's on disk.
-      const oldestDate = new Date(oldestMs);
-      oldestDate.setUTCHours(0, 0, 0, 0);
-      if (oldestDate > new Date(targetStart.getTime() + 2 * DAY_MS)) {
-        pushChunks(targetStart, new Date(oldestDate.getTime() - DAY_MS));
-      }
-      // Top-up: we need more recent data than what's on disk.
-      const newestDate = new Date(newestMs);
-      newestDate.setUTCHours(0, 0, 0, 0);
-      const dayAfterNewest = new Date(newestDate.getTime() + DAY_MS);
-      if (dayAfterNewest <= yesterday) {
-        pushChunks(dayAfterNewest, yesterday);
-      }
-    }
+    pushChunks(targetStart, yesterday);
+    ranges.reverse(); // newest first — user-visible recent range fills in fastest
 
     if (ranges.length === 0) {
       console.log(
@@ -754,7 +735,30 @@ scheduleNextRefresh(REFRESH_INTERVAL_MS);
             }),
           );
         } else {
+          // Count point insertions for visibility: a success response with
+          // empty rates would silently no-op without this. Treats that case
+          // as a failure too so /health.totalFailedChunks reflects reality.
+          const before = symbols
+            .map((s) => timeseriesBySymbol.get(s)?.length ?? 0)
+            .reduce((a, b) => a + b, 0);
           ingestChunk(tf.rates);
+          const after = symbols
+            .map((s) => timeseriesBySymbol.get(s)?.length ?? 0)
+            .reduce((a, b) => a + b, 0);
+          const inserted = after - before;
+          if (inserted === 0) {
+            failedChunks++;
+            console.warn(
+              JSON.stringify({
+                severity: "WARNING",
+                component: "seed_chunk",
+                outcome: "empty_rates",
+                start: fmt(start),
+                end: fmt(end),
+                rateKeys: Object.keys(tf.rates).length,
+              }),
+            );
+          }
         }
       } catch (e: any) {
         failedChunks++;
