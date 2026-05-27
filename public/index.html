@@ -580,8 +580,33 @@
         const all = (data?.symbols?.[symbol] || [])
           .slice()
           .sort((a, b) => a.t - b.t);
-        if (days === 0) return all;
-        return all.slice(-days);
+        if (all.length === 0) return all;
+
+        // Filter by time window in ms (NOT array index — fixes the "1Y was
+        // actually 365 entries" bug; with 5-min live refresh that's ~36h not 1y).
+        let filtered;
+        if (days === 0) {
+          filtered = all;
+        } else {
+          const newest = all[all.length - 1].t;
+          const cutoff = newest - days * 86_400_000;
+          filtered = all.filter((p) => p.t >= cutoff);
+        }
+
+        // Downsample to one point per UTC day for long windows. The seed
+        // produces daily points; the periodic refresh appends ~288 intraday
+        // points/day. Without downsampling, the recent tail of 1Y/3Y/ALL
+        // charts shows a dense, near-flat cluster of live data while
+        // earlier days have a single dot each.
+        if (days === 0 || days >= 30) {
+          const byDay = new Map();
+          for (const p of filtered) {
+            const day = Math.floor(p.t / 86_400_000);
+            byDay.set(day, p); // later points overwrite earlier — latest-per-day
+          }
+          return [...byDay.values()].sort((a, b) => a.t - b.t);
+        }
+        return filtered;
       }
 
       function computeChange(points) {
