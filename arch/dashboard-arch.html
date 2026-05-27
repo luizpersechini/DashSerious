@@ -411,7 +411,7 @@
         <div class="brand">DashSerious</div>
         <h1>Architecture Map</h1>
         <div class="brand-sub">
-          v1.2.4 · 2026-05-26 · Node 20 / Express 5 / React 18 · prod hardening
+          v1.2.4 · 2026-05-27 · Node 20 / Express 5 / React 18 · prod hardening
           pass
         </div>
       </div>
@@ -1356,6 +1356,41 @@ REFRESH_INTERVAL: 5min (METALPRICE_REFRESH_MINUTES=5)</pre
               <td class="gold">#12</td>
               <td class="muted">seedComplete=true in outer catch</td>
             </tr>
+            <tr>
+              <td class="gold">chart</td>
+              <td class="muted">
+                <strong>2026-05-27:</strong> getPoints() filters by ms
+                time-window (not array index) + downsamples to daily for windows
+                ≥30d. Old slice(-365) showed ~1.5 days as "1Y".
+              </td>
+            </tr>
+            <tr>
+              <td class="gold">seed-edge</td>
+              <td class="muted">
+                <strong>2026-05-27:</strong> Seed always fetches the full range.
+                The hasData/backfill+topup dual path had an edge case where a
+                live intraday point made the topup silently skip the most recent
+                365 days.
+              </td>
+            </tr>
+            <tr>
+              <td class="gold">seed-empty</td>
+              <td class="muted">
+                <strong>2026-05-27:</strong> Detect success-but-zero-points
+                chunks (compare timeseries size before/after ingest). Counts
+                toward totalFailedChunks with a WARNING log so it's no longer
+                silent.
+              </td>
+            </tr>
+            <tr>
+              <td class="gold">undici</td>
+              <td class="muted">
+                <strong>2026-05-26:</strong> All metalpriceClient methods wrap
+                their work in withHardTimeout() (Promise.race manual timer) —
+                AbortSignal-only timeouts silently miss the response stream
+                phase.
+              </td>
+            </tr>
           </table>
           <div class="highlight warn" style="margin-top: 12px">
             <strong>Still open:</strong> #1 (Cloud Run tmpfs persistence is
@@ -1375,7 +1410,7 @@ REFRESH_INTERVAL: 5min (METALPRICE_REFRESH_MINUTES=5)</pre
           margin-top: 40px;
         "
       >
-        DashSerious v1.2.4 · generated 2026-05-26 · arch/dashboard-arch.html
+        DashSerious v1.2.4 · generated 2026-05-27 · arch/dashboard-arch.html
       </div>
     </div>
   </body>

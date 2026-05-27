@@ -2,10 +2,10 @@
   "_meta": {
     "project": "DashSerious",
     "version": "1.2.4",
-    "generated": "2026-05-26",
+    "generated": "2026-05-27",
     "purpose": "Architecture reference for agents implementing new features",
     "repo": "https://github.com/luizpersechini/DashSerious",
-    "lastMajorChanges": "Resilience hardening: self-rescheduling refresh with retry+backoff, Promise.race hard-timeout on refresh, per-chunk seed try/catch, 503+Retry-After gate, /health diagnostics, structured JSON logging, removed user refresh button. Cloud Run: --min-instances 1, --update-env-vars. Plan: essential→basic."
+    "lastMajorChanges": "2026-05-26: resilience hardening (self-rescheduling refresh + retry, Promise.race hard-timeout on all 3 metalpriceClient methods, per-chunk seed try/catch, 503+Retry-After gate, /health diagnostics, structured JSON logging, removed refresh button, --min-instances 1, plan essential→basic, 5-min refresh). 2026-05-27: chart timeframe filter now uses real time-window + daily downsample for ≥30d windows (previously slice(-N) treated entries as days); seed always fetches full range (removed hasData edge case that silently skipped the most recent year); seed detects success-but-empty-rates chunks."
   },
 
   "stack": {
@@ -421,9 +421,12 @@
 
   "knownGotchas": [
     "Cloud Run filesystem is ephemeral tmpfs — data/timeseries.json writes/reads work but vanish on every container restart. The seed re-runs on every cold start. Real persistence (GCS bucket via gcsfuse, or Firestore) is the remaining audit #1 fix.",
-    "AbortSignal.timeout in undici (Node fetch) can silently miss the response stream phase — a hung fetch never aborts. Mitigated by Promise.race against a manual 30s timer in coalesceRefresh.",
-    "fetchTimeframe must have a generous timeout (60s) — Cloud Run southamerica-east1 → metalpriceapi consistently exceeds 8s with 12 symbols × 365 days payload. Original 8s timeout (commit 026a2cb) silently broke the seed for 5 days.",
-    "Seed chunks need per-chunk try/catch — a single failing chunk (network blip, !res.ok) would otherwise propagate to the outer try/catch, leaving seedComplete=false and zero historical data.",
+    "AbortSignal.timeout in undici (Node fetch) can silently miss the response stream phase — a hung fetch never aborts. Every metalpriceClient method (fetchLatest/Timeframe/Change) now uses withHardTimeout() — a Promise.race against a manual setTimeout — as a guaranteed-rejection backstop.",
+    "fetchTimeframe must have a generous timeout (60s AbortSignal + 70s manual backstop) — Cloud Run southamerica-east1 → metalpriceapi consistently exceeds 8s with 12 symbols × 365 days payload. Original 8s timeout (commit 026a2cb) silently broke the seed for 5 days.",
+    "Seed chunks need per-chunk try/catch — a single failing chunk (network blip, !res.ok, hard-timeout) would otherwise propagate to the outer try/catch, leaving seedComplete=false and zero historical data.",
+    "Seed must always fetch the full range, not differ on hasData. The previous hasData/backfill+topup logic had an edge case: if `await ready` had added a live intraday point before the seed ran, the topup branch saw oldestMs/newestMs as that point and silently failed to ingest the most recent 365 days. Now always pushChunks(targetStart, yesterday) and trust the dedupe.",
+    "Seed empty-rates detection: a chunk request returning success=true with rates that produce 0 inserted points (e.g., upstream temporarily returns malformed data) is now treated as a failed chunk too. /health.totalFailedChunks reflects this.",
+    "Frontend chart timeframe filter: NEVER use array.slice(-N) with N=days — with intraday refreshes you have ~288 entries/day, not 1/day. Use a real time-window filter (newest_t - days × 86_400_000). Also downsample to one-point-per-day for windows ≥ 30 days, otherwise the dense live tail visually flattens long charts.",
     "border shorthand + borderLeft: use borderTop/Right/Bottom individually to avoid CSS transition bug on left accent bar (the shorthand briefly overrides border-left-color, transition fires on intermediate value).",
     "pubDate from NewsData.io is 'YYYY-MM-DD HH:MM:SS' with no timezone — must append 'T' and 'Z' before Date.parse() or articles show 3h stale on UTC-3 machines.",
     "pubDate from RSS feeds is RFC 2822 — Date.parse() handles correctly without transformation.",
@@ -555,6 +558,31 @@
       "id": "#12",
       "resolved": "2026-05-26",
       "fix": "seedComplete=true in outer catch so UI seedPending flag doesn't hang."
+    },
+    {
+      "id": "chart-timeframe",
+      "resolved": "2026-05-27",
+      "fix": "getPoints() in public/index.html: filter by ms time-window (not array index), and downsample to one-per-UTC-day for windows ≥ 30d. Old slice(-365) showed ~1.5 days as '1Y'."
+    },
+    {
+      "id": "seed-edge-case",
+      "resolved": "2026-05-27",
+      "fix": "Seed always fetches the full historical range. Removed the hasData/backfill+topup dual path which had an edge case where a single live intraday point made the topup branch silently skip the most recent 365 days of historical data."
+    },
+    {
+      "id": "seed-empty-rates",
+      "resolved": "2026-05-27",
+      "fix": "Seed now compares timeseries size before/after each ingestChunk. If a chunk returns success=true but inserts 0 points, increment failedChunks and log WARNING. Catches a class of silent upstream-malformed-response bugs."
+    },
+    {
+      "id": "abortsignal-undici",
+      "resolved": "2026-05-26",
+      "fix": "All three metalpriceClient methods wrap their work in withHardTimeout() — a Promise.race vs manual setTimeout. AbortSignal-only timeouts can silently miss the response stream; this is the backstop."
+    },
+    {
+      "id": "boot-race",
+      "resolved": "2026-05-26",
+      "fix": "seedHistory now awaits the ready promise before its chunk loop. Prevents the seed from competing with the initial coalesceRefresh for network bandwidth at boot."
     }
   ]
 }
