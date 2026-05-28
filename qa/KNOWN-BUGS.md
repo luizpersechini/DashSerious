@@ -4,6 +4,50 @@ Every bug we've shipped to production. Each entry includes the symptom, root cau
 
 ---
 
+## 2026-05-28 — Hardcoded -$0.15/lb adjustment was making prices wrong, not right
+
+**Symptom:** at some point earlier we noticed metalpriceapi copper/nickel values "didn't match TradingView/Kitco" and applied a `-0.15` subtract per pound. Carried for weeks before being questioned.
+
+**Root cause / measurement:** sampled metalpriceapi against open public references on 2026-05-28:
+
+| Symbol           | metalpriceapi raw | Stooq HG.F / Investing.com NI | Diff   |
+| ---------------- | ----------------- | ----------------------------- | ------ |
+| Copper (USD/lb)  | $6.3499           | $6.3423 (Stooq HG.F)          | +0.12% |
+| Nickel (USD/ton) | $18,880           | $18,901 (Investing.com)       | −0.11% |
+| Gold (USD/oz)    | $4,451            | $4,483 (Stooq GC.F)           | −0.71% |
+
+All within 1%. The `-$0.15/lb` adjustment was ~2.4% — i.e. **pushing prices AWAY from market reality**, not toward it. Likely originated from comparing different contracts (LME cash vs 3-month vs COMEX) or a stale tab.
+
+**Fix:** Two parts, both pushed 2026-05-28.
+
+1. Removed the adjustment from `public/index.html` METALS array for XCU and NI. Prices now displayed as-is from metalpriceapi.
+
+2. Added `src/calibrationClient.ts` — a calibration tracker that periodically samples Stooq CSV + Investing.com and records the diff vs metalpriceapi. Surfaces rolling diff per symbol on `/health` under `calibration.bySymbol`. The data is **measured, not applied** — if the diff ever drifts to a problematic level, you'll see it on `/health` and can decide what to do based on real numbers.
+
+**Why this slipped through QA:** the adjustment was made eyeballing one moment's price comparison and never re-validated. Now: regression test in `test/smoke.test.ts` asserts the adjustment string is NOT in the bundled index.html, and the calibration block is present in `/health`.
+
+**Detection recipe:**
+
+```bash
+PROD=https://dashboard-1056503697671.southamerica-east1.run.app
+# Wait at least 30s after a fresh deploy for first calibration sample.
+curl -s $PROD/health | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+cal=d.get('calibration',{}).get('bySymbol',{})
+for sym, data in cal.items():
+    mean=data.get('meanDiffPct')
+    n=data.get('samples',0)
+    print(f'  {sym:6s}  samples={n}  meanDiffPct={mean:.2f}%' if mean is not None else f'  {sym:6s}  no samples yet')
+"
+```
+
+**Expected:** every symbol's `meanDiffPct` within ±2%. If any symbol drifts beyond ±3% for sustained periods, investigate.
+
+**Files touched:** `public/index.html`, `src/calibrationClient.ts` (new), `src/server.ts` (scheduler + /health), `test/smoke.test.ts` (regression).
+
+---
+
 ## 2026-05-27 — Cloud Run CPU throttling stalled every periodic refresh
 
 **Symptom:** on every fresh container, the scheduled periodic refresh hit `fetchLatest hard timeout (25000ms)` indefinitely. Manual curl to metalpriceapi: <1s. Manual `/api/gold/latest` against the same container: <1s. Only the background-timer-triggered fetch stalled. `lastRefreshAt` stayed `null` for the entire container lifetime; `cacheWarm` stayed `false`.

@@ -185,9 +185,13 @@
           unit: "USD/lb",
           color: "#d4773a",
           cssColor: "var(--copper)",
-          fmt: (v) => `$${(v - 0.15).toFixed(2)}`,
+          // Adjustment removed 2026-05-28: measured vs Stooq HG.F and
+          // Investing.com, metalpriceapi was within ~0.1% — the prior
+          // -0.15/lb tweak was based on a misperception and was pushing
+          // prices AWAY from market reality. See qa/KNOWN-BUGS.md.
+          fmt: (v) => `$${v.toFixed(2)}`,
           subLabel: (v) =>
-            `$${Math.round((v - 0.15) * 2204.623).toLocaleString("en-US")} /ton`,
+            `$${Math.round(v * 2204.623).toLocaleString("en-US")} /ton`,
         },
         {
           key: "NI",
@@ -196,9 +200,9 @@
           unit: "USD/lb",
           color: "#3ab87a",
           cssColor: "var(--nickel)",
-          fmt: (v) => `$${(v - 0.15).toFixed(2)}`,
+          fmt: (v) => `$${v.toFixed(2)}`,
           subLabel: (v) =>
-            `$${Math.round((v - 0.15) * 2204.623).toLocaleString("en-US")} /ton`,
+            `$${Math.round(v * 2204.623).toLocaleString("en-US")} /ton`,
         },
         {
           key: "XCO",

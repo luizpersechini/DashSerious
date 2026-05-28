@@ -15,6 +15,11 @@ import {
   registerGracefulPersist,
 } from "./storage.js";
 import { fetchNews, type NewsItem } from "./newsClient.js";
+import {
+  fetchAllReferences,
+  REFERENCES,
+  type ReferenceUnit,
+} from "./calibrationClient.js";
 
 type MetalCache = {
   usdPerOunce: number;
@@ -132,6 +137,20 @@ let lastRefreshAt: number | null = null;
 let lastRefreshError: string | null = null;
 let nextRefreshAt: number | null = null;
 let totalFailedChunks = 0;
+
+// Calibration state — rolling samples of (our metalpriceapi value vs an
+// open public reference) per symbol. Kept in memory only; tmpfs anyway.
+// See src/calibrationClient.ts for source registry.
+type CalibrationSample = {
+  ts: number;
+  ourValue: number;
+  refValue: number;
+  diffPct: number; // (our - ref) / ref × 100
+};
+const CALIBRATION_HISTORY = 24; // keep last N samples per symbol (~12h at 30min cadence)
+const calibrationBySymbol = new Map<string, CalibrationSample[]>();
+let lastCalibrationAt: number | null = null;
+let lastCalibrationError: string | null = null;
 
 async function persistTimeseries(): Promise<void> {
   await persistTS(timeseriesBySymbol);
@@ -312,6 +331,35 @@ function getDisplayValue(symbol: string, cache: MetalCache): number {
   if (FX.has(symbol)) return cache.fxUsdBrl ?? 0;
   if (OIL.has(symbol)) return cache.usdPerBarrel ?? 0;
   return cache.usdPerOunce;
+}
+
+/**
+ * Returns our price for `symbol` in the requested unit, or null if we don't
+ * have a comparable value. Used by the calibration tracker to compare apples
+ * to apples against external references.
+ */
+function getValueInUnit(
+  symbol: string,
+  cache: MetalCache,
+  unit: ReferenceUnit,
+): number | null {
+  // Avdp pound → metric ton conversion factor.
+  const LB_PER_MT = 2204.623;
+  if (unit === "USD/lb") {
+    if (cache.usdPerPound != null) return cache.usdPerPound;
+    // Fallback for XCO (we store usdPerMetricTon natively).
+    if (cache.usdPerMetricTon != null) return cache.usdPerMetricTon / LB_PER_MT;
+    return null;
+  }
+  if (unit === "USD/oz") return cache.usdPerOunce ?? null;
+  if (unit === "USD/ton") {
+    if (cache.usdPerMetricTon != null) return cache.usdPerMetricTon;
+    // NI cache only carries usdPerPound — convert.
+    if (cache.usdPerPound != null) return cache.usdPerPound * LB_PER_MT;
+    return null;
+  }
+  if (unit === "USD/bbl") return cache.usdPerBarrel ?? null;
+  return null;
 }
 
 async function handleLatest(
@@ -523,6 +571,41 @@ app.get("/health", (_req, res) => {
       newestPoint:
         newestPoint === -Infinity ? null : new Date(newestPoint).toISOString(),
     },
+    calibration: (() => {
+      const out: Record<
+        string,
+        {
+          source: string;
+          unit: string;
+          samples: number;
+          latest: CalibrationSample | null;
+          meanDiffPct: number | null;
+        }
+      > = {};
+      for (const ref of REFERENCES) {
+        const arr = calibrationBySymbol.get(ref.symbol) ?? [];
+        const latest = arr.length > 0 ? arr[arr.length - 1]! : null;
+        const mean =
+          arr.length > 0
+            ? arr.reduce((a, b) => a + b.diffPct, 0) / arr.length
+            : null;
+        out[ref.symbol] = {
+          source: ref.source,
+          unit: ref.unit,
+          samples: arr.length,
+          latest,
+          meanDiffPct: mean,
+        };
+      }
+      return {
+        lastSampleAt: lastCalibrationAt
+          ? new Date(lastCalibrationAt).toISOString()
+          : null,
+        lastError: lastCalibrationError,
+        intervalMs: 30 * 60 * 1000,
+        bySymbol: out,
+      };
+    })(),
   });
 });
 
@@ -621,6 +704,59 @@ function scheduleNextRefresh(delayMs: number): void {
 // Kick off the loop. First call happens after REFRESH_INTERVAL_MS — the
 // initial refresh on boot is handled by the `ready` promise above.
 scheduleNextRefresh(REFRESH_INTERVAL_MS);
+
+// ── Calibration scheduler ───────────────────────────────────────────────────
+// Periodically samples open public references (Stooq CSV, Investing.com scrape)
+// and records the diff vs our metalpriceapi values. Surfaces rolling diff on
+// /health so drift between providers is measurable instead of guessed.
+const CALIBRATION_INTERVAL_MS = 30 * 60 * 1000; // 30 min — references update daily-ish
+
+async function runCalibration(): Promise<void> {
+  const now = Date.now();
+  const refs = await fetchAllReferences();
+  for (const ref of REFERENCES) {
+    const refData = refs[ref.symbol];
+    if (!refData || refData.value == null) continue;
+    const cache = caches.get(ref.symbol);
+    if (!cache) continue;
+    const ourValue = getValueInUnit(ref.symbol, cache, ref.unit);
+    if (ourValue == null || ourValue === 0) continue;
+    const diffPct = ((ourValue - refData.value) / refData.value) * 100;
+    const sample: CalibrationSample = {
+      ts: now,
+      ourValue,
+      refValue: refData.value,
+      diffPct,
+    };
+    const arr = calibrationBySymbol.get(ref.symbol) ?? [];
+    arr.push(sample);
+    if (arr.length > CALIBRATION_HISTORY) arr.shift();
+    calibrationBySymbol.set(ref.symbol, arr);
+  }
+  lastCalibrationAt = now;
+  lastCalibrationError = null;
+}
+
+function scheduleNextCalibration(delayMs: number): void {
+  setTimeout(async () => {
+    try {
+      await runCalibration();
+    } catch (err: any) {
+      lastCalibrationError = err?.message ?? String(err);
+      console.error(
+        JSON.stringify({
+          severity: "WARNING",
+          component: "calibration",
+          error: lastCalibrationError,
+        }),
+      );
+    }
+    scheduleNextCalibration(CALIBRATION_INTERVAL_MS);
+  }, delayMs).unref();
+}
+// First calibration fires 30s after boot so live cache has time to warm.
+// After that, runs every CALIBRATION_INTERVAL_MS.
+scheduleNextCalibration(30 * 1000);
 
 // Seed timeseries with historical data on startup. Fetches only missing date ranges
 // (backfill + top-up) to avoid re-hitting the API for data already on disk.

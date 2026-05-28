@@ -136,6 +136,33 @@ describe.skipIf(!hasApiKey)("smoke: server surface", () => {
     expect(res.text).toMatch(/byDay|UTC day/);
   });
 
+  it.skipIf(!hasApiKey)(
+    "/health exposes calibration block with all references (regression: 2026-05-28)",
+    async () => {
+      const res = await request(app).get("/health");
+      expect(res.body).toHaveProperty("calibration");
+      expect(res.body.calibration).toHaveProperty("bySymbol");
+      // The set of symbols tracked by calibration. If you change REFERENCES
+      // in src/calibrationClient.ts, update this assertion deliberately —
+      // the calibration tracker is a contract surface now.
+      const tracked = ["XAU", "XAG", "XPT", "XPD", "XCU", "NI", "WTI"];
+      for (const sym of tracked) {
+        expect(
+          res.body.calibration.bySymbol[sym],
+          `missing calibration symbol ${sym}`,
+        ).toBeDefined();
+      }
+    },
+  );
+
+  it("frontend NO LONGER applies the -0.15/lb adjustment to Cu/Ni (regression)", async () => {
+    const res = await request(app).get("/");
+    // The adjustment was measured wrong vs Stooq/Investing.com and removed.
+    // If anyone re-introduces it, this test fails. The calibration tracker
+    // in /health is the canonical place to measure drift now.
+    expect(res.text).not.toMatch(/v\s*-\s*0\.15/);
+  });
+
   it("deploy workflow has --no-cpu-throttling (regression: CPU-throttle stall)", async () => {
     // 2026-05-27 outage: Cloud Run's default CPU throttling on min-instance
     // containers stalled every periodic refresh's fetch mid-stream. The flag
