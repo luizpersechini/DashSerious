@@ -4,6 +4,54 @@ Every bug we've shipped to production. Each entry includes the symptom, root cau
 
 ---
 
+## 2026-05-27 — Cloud Run CPU throttling stalled every periodic refresh
+
+**Symptom:** on every fresh container, the scheduled periodic refresh hit `fetchLatest hard timeout (25000ms)` indefinitely. Manual curl to metalpriceapi: <1s. Manual `/api/gold/latest` against the same container: <1s. Only the background-timer-triggered fetch stalled. `lastRefreshAt` stayed `null` for the entire container lifetime; `cacheWarm` stayed `false`.
+
+**Root cause:** Cloud Run's default behavior is CPU-throttle min-instance containers between requests. `--min-instances 1` keeps the container alive but throttles CPU when no request is in flight. Background `setTimeout` callbacks fire on the throttled CPU. `fetch()` starts the connection but data transfer stalls because the runtime has no CPU budget to drain the response stream. Manual requests don't see this because Cloud Run gives the container full CPU while a request is being processed.
+
+**Fix:** added `--no-cpu-throttling` to the Cloud Run deploy. CPU is now continuously allocated to the min-instance. Cost increase: roughly +$10-20/mo at small-instance pricing — worth it to eliminate a class of latent failures.
+
+**Also bundled:** `READY_TIMEOUT_MS` 10s → 30s (let the initial 25s hard-timeout actually complete before the seed proceeds), `RETRY_INTERVAL_MS` 60s → 15s (recover from any transient failure within seconds, not a full minute).
+
+**Why this slipped through QA:** we kept verifying with manual curl, which always succeeded. The producer-side `/health` check showed cacheWarm/seedComplete=true _eventually_ (after the on-demand path we accidentally triggered while debugging) but `lastRefreshAt` was the smoking gun and got ignored. Detection now belongs in the periodic-refresh check, not just the cache-warm check.
+
+**Detection recipe:**
+
+```bash
+# Wait for the FIRST periodic refresh to fire on a fresh container.
+# If --no-cpu-throttling is missing OR something else stalls background
+# tasks, lastRefreshAt stays null forever despite cacheWarm flipping true
+# via on-demand triggers.
+PROD=https://dashboard-1056503697671.southamerica-east1.run.app
+
+# Right after a deploy completes, poll until uptime > intervalMs and
+# verify lastRefreshAt is non-null AND lastRefreshError is null.
+for i in {1..30}; do
+  resp=$(curl -s --max-time 10 $PROD/health)
+  up=$(echo "$resp" | python3 -c "import json,sys; print(int(json.load(sys.stdin).get('uptimeMs',0)/1000))")
+  last=$(echo "$resp" | python3 -c "import json,sys; print(json.load(sys.stdin).get('refresh',{}).get('lastRefreshAt'))")
+  err=$(echo "$resp" | python3 -c "import json,sys; print(json.load(sys.stdin).get('refresh',{}).get('lastRefreshError'))")
+  echo "[$i] up=${up}s lastSuccess=$last err=$err"
+  # Expect lastSuccess non-null by uptime ~30s. Expect err=None.
+  sleep 15
+done
+```
+
+Cloud Run service config check:
+
+```bash
+gcloud run services describe dashboard --region=southamerica-east1 \
+  --format='value(spec.template.metadata.annotations."run.googleapis.com/cpu-throttling")'
+# Should print: false  (cpu-throttling DISABLED = CPU always allocated)
+```
+
+If the annotation is missing or `true`, background timers will silently break.
+
+**Files touched:** `.github/workflows/deploy-cloud-run.yml`, `src/server.ts` (timeout constants).
+
+---
+
 ## 2026-05-27 — Frontend never re-fetches; open tabs go stale forever
 
 **Symptom:** dashboard showed prices that hadn't moved in hours even though the server was refreshing every 5 min. Reload made it work.

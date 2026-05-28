@@ -136,6 +136,20 @@ describe.skipIf(!hasApiKey)("smoke: server surface", () => {
     expect(res.text).toMatch(/byDay|UTC day/);
   });
 
+  it("deploy workflow has --no-cpu-throttling (regression: CPU-throttle stall)", async () => {
+    // 2026-05-27 outage: Cloud Run's default CPU throttling on min-instance
+    // containers stalled every periodic refresh's fetch mid-stream. The flag
+    // must persist on every deploy. See qa/KNOWN-BUGS.md for the full story.
+    const fs = await import("node:fs/promises");
+    const yml = await fs.readFile(
+      ".github/workflows/deploy-cloud-run.yml",
+      "utf8",
+    );
+    expect(yml).toMatch(/--no-cpu-throttling/);
+    expect(yml).toMatch(/--min-instances\s+1/);
+    expect(yml).toMatch(/--update-env-vars/); // must NOT regress to --set-env-vars (audit #2)
+  });
+
   it("GET /api/metal/unknown/latest returns 404", async () => {
     const res = await request(app).get("/api/metal/doesnotexist/latest");
     expect(res.status).toBe(404);

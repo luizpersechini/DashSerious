@@ -106,6 +106,33 @@ curl -s -w "\nHTTP %{http_code}\n" $PROD/api/gold/latest
 
 ---
 
+## 4b. Periodic refresh actually fires (post-deploy regression check)
+
+Within ~30 seconds of a fresh container starting, `lastRefreshAt` should be non-null. If it stays null forever despite `cacheWarm` being true (which can flip from on-demand handler calls), Cloud Run is silently CPU-throttling our background timers and `fetch` is stalling.
+
+```bash
+PROD=https://dashboard-1056503697671.southamerica-east1.run.app
+for i in {1..8}; do
+  curl -s --max-time 10 $PROD/health | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(f'  up={int(d[\"uptimeMs\"]/1000)}s warm={d[\"cacheWarm\"]} lastSuccess={d[\"refresh\"][\"lastRefreshAt\"]} err={d[\"refresh\"][\"lastRefreshError\"]}')"
+  sleep 10
+done
+```
+
+**Expected by ~30s uptime:** `warm=True`, `lastSuccess=<recent ISO>`, `err=None`.
+
+**Failure signature:** `lastSuccess=None` past 30s uptime, with `err="fetchLatest hard timeout (25000ms)"` → CPU throttling is back. Verify `--no-cpu-throttling` is still in the deploy workflow:
+
+```bash
+gcloud run services describe dashboard --region=southamerica-east1 \
+  --format='value(spec.template.metadata.annotations."run.googleapis.com/cpu-throttling")'
+# Expected: false
+```
+
+---
+
 ## 5. Refresh cadence (Producer side)
 
 ```bash

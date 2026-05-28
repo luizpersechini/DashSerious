@@ -48,6 +48,7 @@ Walk through this before every push to `main`. Skip sections that aren't touched
 
 - [ ] Wait for the deploy workflow to show `completed success`
 - [ ] `curl https://dashboard-1056503697671.southamerica-east1.run.app/health` returns `cacheWarm: true`, `seedComplete: true`, `lastRefreshError: null`
+- [ ] **`refresh.lastRefreshAt` is non-null within 30s of container start** — confirms the SCHEDULED periodic refresh ran (not just an on-demand one). If it stays null while `cacheWarm` is true, CPU throttling is silently breaking background timers. See `qa/KNOWN-BUGS.md` § "Cloud Run CPU throttling."
 - [ ] Open the production dashboard in a browser, hard-refresh, confirm prices render
 - [ ] **Critical for data-flow changes**: leave the tab open for one full refresh interval (5 min by default) and verify the displayed price actually changes without you reloading
 
