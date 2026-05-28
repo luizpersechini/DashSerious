@@ -14,6 +14,7 @@ import {
   persistTimeseries as persistTS,
   persistJson,
   hydrateJson,
+  getStorageStatus,
   registerGracefulPersist,
 } from "./storage.js";
 import { fetchNews, type NewsItem } from "./newsClient.js";
@@ -156,8 +157,18 @@ const calibrationBySymbol = new Map<string, CalibrationSample[]>();
 let lastCalibrationAt: number | null = null;
 let lastCalibrationError: string | null = null;
 
+// Persistence diagnostics — surfaced via /health to confirm whether the GCS
+// mount is active and actually being written to.
+let storageStatus: {
+  dataDir: string;
+  configured: boolean;
+  writable: boolean;
+} | null = null;
+let lastPersistAt: number | null = null;
+
 async function persistTimeseries(): Promise<void> {
   await persistTS(timeseriesBySymbol);
+  lastPersistAt = Date.now();
 }
 
 async function persistCalibration(): Promise<void> {
@@ -179,6 +190,12 @@ const READY_TIMEOUT_MS = 30_000;
 const bootStart = Date.now();
 let seedComplete = false;
 const ready: Promise<void> = (async () => {
+  // Probe storage once at boot — confirms whether the GCS mount is present
+  // and writable (vs ephemeral tmpfs). Surfaced via /health.
+  storageStatus = await getStorageStatus();
+  console.log(
+    `[storage] dataDir=${storageStatus.dataDir} configured=${storageStatus.configured} writable=${storageStatus.writable}`,
+  );
   // Hydrate from disk first so charts aren't empty during the initial fetch window.
   const h = await hydrateTimeseries(timeseriesBySymbol);
   if (h.loaded)
@@ -599,6 +616,20 @@ app.get("/health", (_req, res) => {
         oldestPoint === Infinity ? null : new Date(oldestPoint).toISOString(),
       newestPoint:
         newestPoint === -Infinity ? null : new Date(newestPoint).toISOString(),
+    },
+    persistence: {
+      // mode: "gcs" once DATA_BUCKET is provisioned (DATA_DIR set + writable),
+      // "ephemeral" otherwise. lastPersistAt confirms writes are landing.
+      mode:
+        storageStatus?.configured && storageStatus?.writable
+          ? "gcs"
+          : "ephemeral",
+      dataDir: storageStatus?.dataDir ?? null,
+      configured: storageStatus?.configured ?? null,
+      writable: storageStatus?.writable ?? null,
+      lastPersistAt: lastPersistAt
+        ? new Date(lastPersistAt).toISOString()
+        : null,
     },
     calibration: (() => {
       const out: Record<

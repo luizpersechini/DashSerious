@@ -155,6 +155,19 @@ describe.skipIf(!hasApiKey)("smoke: server surface", () => {
     },
   );
 
+  it.skipIf(!hasApiKey)(
+    "/health exposes persistence status block (regression: 2026-05-28)",
+    async () => {
+      const res = await request(app).get("/health");
+      expect(res.body).toHaveProperty("persistence");
+      expect(["gcs", "ephemeral"]).toContain(res.body.persistence.mode);
+      expect(res.body.persistence).toHaveProperty("dataDir");
+      expect(res.body.persistence).toHaveProperty("writable");
+      // Local test run has no DATA_BUCKET → must report ephemeral.
+      expect(res.body.persistence.mode).toBe("ephemeral");
+    },
+  );
+
   it("frontend NO LONGER applies the -0.15/lb adjustment to Cu/Ni (regression)", async () => {
     const res = await request(app).get("/");
     // The adjustment was measured wrong vs Stooq/Investing.com and removed.

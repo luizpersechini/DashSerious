@@ -90,6 +90,31 @@ export async function hydrateJson<T>(name: string): Promise<T | null> {
   }
 }
 
+/**
+ * Reports the active storage location and whether it's actually writable.
+ * Does a real write+delete probe so a misconfigured/unmounted GCS volume
+ * shows up as writable:false rather than silently failing on the next persist.
+ * `configured` is true when DATA_DIR was set explicitly (prod = GCS mount).
+ */
+export async function getStorageStatus(): Promise<{
+  dataDir: string;
+  configured: boolean;
+  writable: boolean;
+}> {
+  const configured = !!process.env.DATA_DIR;
+  let writable = false;
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    const probe = path.join(DATA_DIR, ".probe");
+    await fs.writeFile(probe, String(Date.now()), "utf8");
+    await fs.rm(probe, { force: true });
+    writable = true;
+  } catch {
+    writable = false;
+  }
+  return { dataDir: DATA_DIR, configured, writable };
+}
+
 export function registerGracefulPersist(flush: () => Promise<void>) {
   let flushing = false;
   const handler = async (_signal: NodeJS.Signals) => {
