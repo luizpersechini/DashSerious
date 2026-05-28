@@ -22,7 +22,7 @@ export type ReferenceSource = {
   /** Public URL of the reference */
   url: string;
   /** Source label for diagnostics */
-  source: "stooq" | "investing.com";
+  source: "stooq" | "investing.com" | "tradingeconomics";
   /** Unit of the returned numeric value */
   unit: ReferenceUnit;
   /** Parser: takes the raw response body, returns the price in `unit` or null */
@@ -56,6 +56,21 @@ function parseInvestingPriceLast(body: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * TradingEconomics commodity pages: extracts the "Nickel rose to X USD/T"
+ * phrase. Captures any directional verb (rose/fell/jumped/dropped/etc).
+ * Unit text appears as either USD/T or USD/MT depending on the page.
+ */
+function parseTradingEconomicsCommodity(body: string): number | null {
+  const m = body.match(
+    /to\s+([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]+)?)\s+USD\/[A-Z]+/,
+  );
+  if (!m) return null;
+  const cleaned = (m[1] ?? "").replace(/,/g, "");
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
 // ── Source registry ─────────────────────────────────────────────────────────
 //
 // Each entry pairs an internal symbol with an open public reference.
@@ -73,11 +88,11 @@ export const REFERENCES: ReferenceSource[] = [
   },
   {
     symbol: "NI",
-    name: "Nickel (LME 3-month, Investing.com)",
-    url: "https://www.investing.com/commodities/nickel",
-    source: "investing.com",
+    name: "Nickel (TradingEconomics)",
+    url: "https://tradingeconomics.com/commodity/nickel",
+    source: "tradingeconomics",
     unit: "USD/ton",
-    parse: parseInvestingPriceLast,
+    parse: parseTradingEconomicsCommodity,
   },
   {
     symbol: "XAU",
