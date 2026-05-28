@@ -139,7 +139,11 @@ async function persistTimeseries(): Promise<void> {
 
 // Readiness: server accepts connections immediately, but /api handlers wait until the first
 // refresh resolves (bounded) so we never serve a cold empty cache on first load.
-const READY_TIMEOUT_MS = 10_000;
+// 30s: must allow the initial fetchLatest's 25s hard-timeout to actually
+// complete (success or fail) before letting the seed proceed. With 10s the
+// ready timer fires while initial refresh is still pending, the seed starts,
+// and the two race for network bandwidth.
+const READY_TIMEOUT_MS = 30_000;
 const bootStart = Date.now();
 let seedComplete = false;
 const ready: Promise<void> = (async () => {
@@ -587,7 +591,11 @@ app.get("/api/news", async (_req, res) => {
 // Replaces a bare setInterval: on failure, schedules a fast retry (1 min)
 // instead of waiting the full REFRESH_INTERVAL_MS cycle. Structured logging
 // to Cloud Logging via stderr.
-const RETRY_INTERVAL_MS = 60 * 1000;
+// 15s: when a refresh fails, recover fast. We've observed on-demand fetch
+// succeed within 1s right after a scheduled one timed out — the failure
+// is transient, so a quick retry usually wins. Old value (60s) left the
+// system stale for a full minute after each transient blip.
+const RETRY_INTERVAL_MS = 15 * 1000;
 function scheduleNextRefresh(delayMs: number): void {
   nextRefreshAt = Date.now() + delayMs;
   setTimeout(async () => {

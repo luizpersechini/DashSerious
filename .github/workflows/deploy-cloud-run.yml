@@ -77,4 +77,5 @@ jobs:
             --allow-unauthenticated \
             --service-account $RUNTIME_SA \
             --min-instances 1 \
+            --no-cpu-throttling \
             --update-env-vars METALPRICE_API_KEY=$METALPRICE_API_KEY,METALPRICE_API_BASE=$METALPRICE_API_BASE,METALPRICE_PLAN=$METALPRICE_PLAN,METALPRICE_REFRESH_MINUTES=$METALPRICE_REFRESH_MINUTES,NEWS_API_KEY=$NEWS_API_KEY,REFRESH_TOKEN=$REFRESH_TOKEN,CORS_ALLOW_ORIGINS=$CORS_ALLOW_ORIGINS
