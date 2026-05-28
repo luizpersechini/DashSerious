@@ -1958,33 +1958,63 @@
         const isMobile = windowWidth < 640;
 
         useEffect(() => {
-          loadData()
-            .then((d) => {
-              setRawData(d);
-              setLoading(false);
-              const pts = d?.symbols?.XAU || [];
-              if (pts.length) {
-                const last = pts[pts.length - 1];
-                setLastUpdated(
-                  new Date(last.t).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  }),
-                );
-              }
-            })
-            .catch(() => setLoading(false));
+          // Inline helper so we can call from mount + interval without exposing
+          // setRawData via closures from elsewhere.
+          const refresh = () =>
+            loadData()
+              .then((d) => {
+                if (!d) return;
+                setRawData(d);
+                setLoading(false);
+                const pts = d?.symbols?.XAU || [];
+                if (pts.length) {
+                  const last = pts[pts.length - 1];
+                  setLastUpdated(
+                    new Date(last.t).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    }),
+                  );
+                }
+              })
+              .catch(() => setLoading(false));
 
-          fetch("/api/news")
-            .then((r) => r.json())
-            .then((d) => setNewsData(d))
-            .catch(() => setNewsData({ items: [], configured: true }));
+          const refreshNews = () =>
+            fetch("/api/news")
+              .then((r) => r.json())
+              .then((d) => setNewsData(d))
+              .catch(() => setNewsData({ items: [], configured: true }));
 
+          // Initial load
+          refresh();
+          refreshNews();
           fetch("/api/version")
             .then((r) => r.json())
             .then((d) => setAppVersion(d.version))
             .catch(() => {});
+
+          // Periodic polling. Server-side refresh is 5min, news cache is 30min.
+          // Polling slightly more often than server-side ensures we see updates
+          // soon after they land, without hammering the API.
+          const priceTimer = setInterval(refresh, 5 * 60 * 1000);
+          const newsTimer = setInterval(refreshNews, 15 * 60 * 1000);
+
+          // Also refresh when the tab regains focus — handles "user came back
+          // after lunch, see fresh data immediately" case.
+          const onVisible = () => {
+            if (document.visibilityState === "visible") {
+              refresh();
+              refreshNews();
+            }
+          };
+          document.addEventListener("visibilitychange", onVisible);
+
+          return () => {
+            clearInterval(priceTimer);
+            clearInterval(newsTimer);
+            document.removeEventListener("visibilitychange", onVisible);
+          };
         }, []);
 
         const allPoints = useMemo(() => {
