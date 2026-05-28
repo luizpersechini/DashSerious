@@ -12,6 +12,8 @@ import { config } from "./config.js";
 import {
   hydrateTimeseries,
   persistTimeseries as persistTS,
+  persistJson,
+  hydrateJson,
   registerGracefulPersist,
 } from "./storage.js";
 import { fetchNews, type NewsItem } from "./newsClient.js";
@@ -139,8 +141,9 @@ let nextRefreshAt: number | null = null;
 let totalFailedChunks = 0;
 
 // Calibration state — rolling samples of (our metalpriceapi value vs an
-// open public reference) per symbol. Kept in memory only; tmpfs anyway.
-// See src/calibrationClient.ts for source registry.
+// open public reference) per symbol. Persisted to DATA_DIR so the rolling
+// window survives restarts (see src/storage.ts). See src/calibrationClient.ts
+// for the source registry.
 type CalibrationSample = {
   ts: number;
   ourValue: number;
@@ -148,12 +151,22 @@ type CalibrationSample = {
   diffPct: number; // (our - ref) / ref × 100
 };
 const CALIBRATION_HISTORY = 24; // keep last N samples per symbol (~12h at 30min cadence)
+const CALIBRATION_FILE = "calibration.json";
 const calibrationBySymbol = new Map<string, CalibrationSample[]>();
 let lastCalibrationAt: number | null = null;
 let lastCalibrationError: string | null = null;
 
 async function persistTimeseries(): Promise<void> {
   await persistTS(timeseriesBySymbol);
+}
+
+async function persistCalibration(): Promise<void> {
+  await persistJson(CALIBRATION_FILE, {
+    version: 1,
+    savedAt: Date.now(),
+    lastCalibrationAt,
+    bySymbol: Object.fromEntries(calibrationBySymbol.entries()),
+  });
 }
 
 // Readiness: server accepts connections immediately, but /api handlers wait until the first
@@ -170,6 +183,22 @@ const ready: Promise<void> = (async () => {
   const h = await hydrateTimeseries(timeseriesBySymbol);
   if (h.loaded)
     console.log(`[storage] hydrated ${h.symbols} symbols from disk`);
+  // Restore calibration rolling window so the mean-diff numbers accumulate
+  // across restarts instead of resetting each deploy.
+  const cal = await hydrateJson<{
+    lastCalibrationAt: number | null;
+    bySymbol: Record<string, CalibrationSample[]>;
+  }>(CALIBRATION_FILE);
+  if (cal?.bySymbol) {
+    for (const [sym, arr] of Object.entries(cal.bySymbol)) {
+      if (Array.isArray(arr))
+        calibrationBySymbol.set(sym, arr.slice(-CALIBRATION_HISTORY));
+    }
+    lastCalibrationAt = cal.lastCalibrationAt ?? null;
+    console.log(
+      `[storage] hydrated calibration for ${calibrationBySymbol.size} symbols`,
+    );
+  }
   await new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, READY_TIMEOUT_MS);
     coalesceRefresh()
@@ -735,6 +764,9 @@ async function runCalibration(): Promise<void> {
   }
   lastCalibrationAt = now;
   lastCalibrationError = null;
+  await persistCalibration().catch(() => {
+    /* non-fatal */
+  });
 }
 
 function scheduleNextCalibration(delayMs: number): void {
@@ -984,8 +1016,10 @@ setInterval(
   5 * 60 * 1000,
 ).unref();
 
-// Flush to disk on graceful shutdown.
-registerGracefulPersist(() => persistTimeseries());
+// Flush to disk on graceful shutdown — both timeseries and calibration.
+registerGracefulPersist(async () => {
+  await Promise.allSettled([persistTimeseries(), persistCalibration()]);
+});
 
 export { app, ready };
 

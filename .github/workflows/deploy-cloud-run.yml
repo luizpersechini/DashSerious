@@ -69,7 +69,24 @@ jobs:
           #   CORS_ALLOW_ORIGINS unset → server enters same-origin-only mode
           REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
           CORS_ALLOW_ORIGINS: ${{ secrets.CORS_ALLOW_ORIGINS }}
+          # Optional — GCS bucket for persistence across restarts. When set,
+          # the deploy mounts it at /mnt/data (gcsfuse, requires gen2) and
+          # points DATA_DIR there. When unset, behaves exactly as before
+          # (ephemeral tmpfs, re-seeds on every restart). To enable:
+          #   1. gsutil mb -l southamerica-east1 gs://<bucket>
+          #   2. grant the runtime SA roles/storage.objectAdmin on the bucket
+          #   3. add DATA_BUCKET as a GitHub Actions secret
+          DATA_BUCKET: ${{ secrets.DATA_BUCKET }}
         run: |
+          VOLUME_ARGS=""
+          DATA_DIR_PREFIX=""
+          if [ -n "$DATA_BUCKET" ]; then
+            echo "Persistence enabled: mounting gs://$DATA_BUCKET at /mnt/data"
+            VOLUME_ARGS="--execution-environment=gen2 --add-volume=name=data,type=cloud-storage,bucket=$DATA_BUCKET --add-volume-mount=volume=data,mount-path=/mnt/data"
+            DATA_DIR_PREFIX="DATA_DIR=/mnt/data,"
+          else
+            echo "DATA_BUCKET unset — running with ephemeral storage (re-seeds on restart)"
+          fi
           gcloud run deploy $SERVICE_NAME \
             --image $REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:${{ github.sha }} \
             --region $REGION \
@@ -78,4 +95,5 @@ jobs:
             --service-account $RUNTIME_SA \
             --min-instances 1 \
             --no-cpu-throttling \
-            --update-env-vars METALPRICE_API_KEY=$METALPRICE_API_KEY,METALPRICE_API_BASE=$METALPRICE_API_BASE,METALPRICE_PLAN=$METALPRICE_PLAN,METALPRICE_REFRESH_MINUTES=$METALPRICE_REFRESH_MINUTES,NEWS_API_KEY=$NEWS_API_KEY,REFRESH_TOKEN=$REFRESH_TOKEN,CORS_ALLOW_ORIGINS=$CORS_ALLOW_ORIGINS
+            $VOLUME_ARGS \
+            --update-env-vars ${DATA_DIR_PREFIX}METALPRICE_API_KEY=$METALPRICE_API_KEY,METALPRICE_API_BASE=$METALPRICE_API_BASE,METALPRICE_PLAN=$METALPRICE_PLAN,METALPRICE_REFRESH_MINUTES=$METALPRICE_REFRESH_MINUTES,NEWS_API_KEY=$NEWS_API_KEY,REFRESH_TOKEN=$REFRESH_TOKEN,CORS_ALLOW_ORIGINS=$CORS_ALLOW_ORIGINS

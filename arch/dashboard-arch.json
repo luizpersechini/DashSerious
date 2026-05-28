@@ -490,12 +490,23 @@
     ]
   },
 
+  "persistence": {
+    "default": "Ephemeral tmpfs (DATA_DIR=./data). Survives nothing across restarts.",
+    "production": "GCS bucket mounted at /mnt/data via gcsfuse (Cloud Run gen2 volume). Activated when the DATA_BUCKET GitHub secret is set — the deploy then adds --execution-environment=gen2 + --add-volume + --add-volume-mount and sets DATA_DIR=/mnt/data. When DATA_BUCKET is unset the deploy behaves exactly as before (ephemeral).",
+    "files": [
+      "timeseries.json (5yr seed + live points)",
+      "calibration.json (rolling drift samples)"
+    ],
+    "writePattern": "atomicWrite() = tmp+rename, with a direct-write fallback for gcsfuse rename quirks. Single writer (min-instances 1).",
+    "enableSteps": [
+      "gsutil mb -l southamerica-east1 gs://<bucket>",
+      "gcloud storage buckets add-iam-policy-binding gs://<bucket> --member=serviceAccount:1056503697671-compute@developer.gserviceaccount.com --role=roles/storage.objectAdmin",
+      "Add DATA_BUCKET=<bucket> as a GitHub Actions repo secret",
+      "Push to main — next deploy mounts the bucket and persistence is live"
+    ]
+  },
+
   "outstandingAuditItems": [
-    {
-      "id": "#1",
-      "severity": "high",
-      "issue": "Cloud Run tmpfs is ephemeral — data/timeseries.json effectively unwritten. Every container restart re-seeds. Fix: GCS bucket via gcsfuse mount or migrate storage.ts to Firestore."
-    },
     {
       "id": "#3-partial",
       "severity": "low",
@@ -519,6 +530,16 @@
   ],
 
   "resolvedAuditItems": [
+    {
+      "id": "#1",
+      "resolved": "2026-05-28",
+      "fix": "GCS persistence via gcsfuse volume mount. storage.ts DATA_DIR is now env-configurable; deploy conditionally mounts gs://$DATA_BUCKET at /mnt/data when the secret is set. timeseries.json and calibration.json both persist. See persistence.enableSteps for activation."
+    },
+    {
+      "id": "#8",
+      "resolved": "2026-05-28",
+      "fix": "registerGracefulPersist now bounds the SIGTERM flush with Promise.race against an 8s timer so a slow GCS write can't exceed Cloud Run's ~10s grace and get hard-killed mid-write."
+    },
     {
       "id": "#2",
       "resolved": "2026-05-26",
