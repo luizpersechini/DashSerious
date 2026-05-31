@@ -2,6 +2,11 @@
 
 Walk through this before every push to `main`. Skip sections that aren't touched by the change.
 
+> **CI gate:** as of 2026-05-28 the deploy workflow runs a `test` job
+> (`tsc --noEmit` + `npm test`) that MUST pass before the `deploy` job starts.
+> A red test now blocks production automatically. This checklist is still the
+> first line of defense — CI is the backstop, not a replacement for thinking.
+
 ## Universal gates (always)
 
 - [ ] `npx tsc --noEmit` passes cleanly

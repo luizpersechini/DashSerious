@@ -15,7 +15,37 @@ env:
   RUNTIME_SA: 1056503697671-compute@developer.gserviceaccount.com
 
 jobs:
+  # Gate: type-check + full vitest suite must pass before anything deploys.
+  # A push to main no longer reaches Cloud Run if the tests are red.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        # METALPRICE_API_KEY lets the API-hitting smoke tests run instead of
+        # skipping. Storage + frontend-bundle regression tests run regardless.
+        env:
+          METALPRICE_API_KEY: ${{ secrets.METALPRICE_API_KEY }}
+          METALPRICE_API_BASE: https://api.metalpriceapi.com/v1
+          METALPRICE_PLAN: basic
+        run: npm test
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
