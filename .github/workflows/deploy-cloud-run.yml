@@ -30,7 +30,13 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        # Mirror the Dockerfile: re-sync the lockfile for this platform, then
+        # ci. The committed package-lock.json intentionally isn't authoritative
+        # (it's reconciled per-platform at build time) — see Dockerfile builder
+        # stage. Plain `npm ci` fails on the cross-platform esbuild drift.
+        run: |
+          npm install --package-lock-only --no-audit --no-fund
+          npm ci --no-audit --no-fund
 
       - name: Type-check
         run: npx tsc --noEmit
