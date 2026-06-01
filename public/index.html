@@ -596,8 +596,13 @@
                     gap: isMobile ? 6 : 8,
                   }}
                 >
-                  {filtered.map((item) => (
-                    <NewsCard key={item.id} item={item} />
+                  {filtered.map((item, idx) => (
+                    // key on link (unique) not item.id — server's id is
+                    // base64(link).slice(0,16), which collides for every URL
+                    // starting with "https://www." and caused React to drop/
+                    // duplicate cards + flood the console. idx suffix guards
+                    // against any remaining dupes.
+                    <NewsCard key={item.link + ":" + idx} item={item} />
                   ))}
                 </div>
               ))}
@@ -1891,6 +1896,12 @@
               borderBottom: "1px solid var(--border)",
               background: "var(--bg)",
               height: 36,
+              // Explicit width:100% so the viewport always fills its parent and
+              // clips the max-content track. A flex container with a single
+              // max-content child + overflow:hidden can otherwise collapse to
+              // 0 width in some layout contexts. flex+alignItems keeps the row
+              // vertically centered in the 36px bar.
+              width: "100%",
               display: "flex",
               alignItems: "center",
               overflow: "hidden",
