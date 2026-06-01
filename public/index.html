@@ -133,14 +133,21 @@
         display: flex;
         align-items: center;
         width: max-content;
-        animation: ticker-scroll var(--ticker-duration, 60s) linear infinite;
+        /* Duration lives here (not inline) so the reduced-motion override
+           below can win — inline custom props would otherwise beat it. */
+        --ticker-duration: 60s;
+        animation: ticker-scroll var(--ticker-duration) linear infinite;
       }
       .ticker-viewport:hover .ticker-track {
         animation-play-state: paused;
       }
+      /* Respect reduced-motion by scrolling gently (much slower) rather than
+         disabling it — a slow horizontal crawl is far less likely to trigger
+         vestibular discomfort than fast motion, while still honoring the
+         explicit "scroll the ticker" intent. */
       @media (prefers-reduced-motion: reduce) {
         .ticker-track {
-          animation: none;
+          --ticker-duration: 90s;
         }
       }
     </style>
@@ -1907,11 +1914,10 @@
               overflow: "hidden",
             }}
           >
-            <div
-              className="ticker-track"
-              style={{ "--ticker-duration": "60s" }}
-            >
-              {/* Two identical copies → translateX(-50%) loops seamlessly. */}
+            <div className="ticker-track">
+              {/* Two identical copies → translateX(-50%) loops seamlessly.
+                  Duration is set in the stylesheet (.ticker-track) so the
+                  reduced-motion media query can override it. */}
               {renderSet("a")}
               {renderSet("b")}
             </div>
