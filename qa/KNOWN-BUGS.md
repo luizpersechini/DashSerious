@@ -4,6 +4,63 @@ Every bug we've shipped to production. Each entry includes the symptom, root cau
 
 ---
 
+## 2026-06-01 — Ticker "not rendering" was actually "not scrolling" under Reduce Motion
+
+**Symptom:** after the ticker was made an auto-scrolling marquee, the user reported it "not rendering" — first on localhost, then "not on prod." It looked identical to the old static bar.
+
+**Root cause:** the bar WAS rendering full-width the whole time (confirmed in the user's real Chrome via the extension: viewport 1914px, 48 items). It just wasn't animating. The reduced-motion media query set `animation: none`, and the user's OS had **Reduce Motion enabled** (`matchMedia('(prefers-reduced-motion: reduce)').matches === true`). So the marquee was frozen.
+
+**The localhost-vs-prod red herring:** the user's localhost was served by the dev server (live file edits, already had the fix), while prod ran the older deployed build. Same Reduce Motion setting on both — different code versions. Not a real environment discrepancy.
+
+**Fix:** under reduced-motion, scroll gently (90s/loop) instead of `animation: none`. Set `--ticker-duration` in the `.ticker-track` CSS rule, NOT inline (inline custom properties outrank the media query and silently block the override). Normal motion = 60s.
+
+**Why it was hard to see:** animations are paused in backgrounded/unfocused tabs and the headless preview, so `getComputedStyle(transform)` reads the start value forever. The reliable check is the Web Animations API.
+
+**Detection recipe (in a focused real browser, via the Chrome extension or DevTools console):**
+
+```js
+const t = document.querySelector(".ticker-track");
+const a = t.getAnimations()[0];
+JSON.stringify({
+  reduceMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+  animationName: getComputedStyle(t).animationName, // must NOT be "none"
+  duration: getComputedStyle(t).animationDuration, // 60s, or 90s under reduce-motion
+  playState: a?.playState, // "running"
+});
+```
+
+**Files touched:** `public/index.html` (CSS `.ticker-track` + reduced-motion media query).
+
+---
+
+## 2026-06-01 — NewsFeed duplicate React keys (cards dropped/duplicated, console flooded)
+
+**Symptom:** console flooded with "Encountered two children with the same key" warnings from NewsFeed; news cards could be dropped or duplicated.
+
+**Root cause:** cards were keyed on `item.id`, which the server computes as `base64(link).slice(0,16)` — identical for every URL starting with `https://www.` (base64 of that prefix is `aHR0cHM6Ly93d3cu`). Colliding keys.
+
+**Fix:** key on `item.link + ":" + index` (link is unique). Frontend-only; didn't touch the server id.
+
+**Detection recipe:** load the dashboard, open console — zero "same key" warnings. Or check `new Set(items.map(i=>i.id)).size === items.length` (will be false; that's why we key on link).
+
+**Files touched:** `public/index.html` (NewsFeed `.map`).
+
+---
+
+## 2026-06-01 — CI test gate failed at `npm ci` (lockfile drift)
+
+**Symptom:** the new CI `test` job failed immediately at install: "npm ci can only install packages when package.json and package-lock.json are in sync. Missing: esbuild@0.28.0 …". The gate worked (it skipped the deploy), but the gate itself was broken.
+
+**Root cause:** the committed `package-lock.json` is intentionally NOT authoritative — it's reconciled per-platform at build time (the Dockerfile runs `npm install --package-lock-only` before `npm ci`). A cross-platform esbuild drift (vitest's nested esbuild) made plain `npm ci` reject it.
+
+**Fix:** the test job mirrors the Dockerfile — `npm install --package-lock-only --no-audit --no-fund` then `npm ci`. Proven sequence (every Docker build uses it).
+
+**Detection recipe:** the gate self-tests on every push; if install ever fails, this is the first thing to check. Locally: `rm -rf node_modules && npm ci` will reproduce the drift; `npm install --package-lock-only && npm ci` resolves it.
+
+**Files touched:** `.github/workflows/deploy-cloud-run.yml`.
+
+---
+
 ## 2026-05-28 — Hardcoded -$0.15/lb adjustment was making prices wrong, not right
 
 **Symptom:** at some point earlier we noticed metalpriceapi copper/nickel values "didn't match TradingView/Kitco" and applied a `-0.15` subtract per pound. Carried for weeks before being questioned.

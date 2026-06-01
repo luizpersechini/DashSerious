@@ -2,10 +2,10 @@
   "_meta": {
     "project": "DashSerious",
     "version": "1.2.4",
-    "generated": "2026-05-27",
+    "generated": "2026-06-01",
     "purpose": "Architecture reference for agents implementing new features",
     "repo": "https://github.com/luizpersechini/DashSerious",
-    "lastMajorChanges": "2026-05-26: resilience hardening (self-rescheduling refresh + retry, Promise.race hard-timeout on all 3 metalpriceClient methods, per-chunk seed try/catch, 503+Retry-After gate, /health diagnostics, structured JSON logging, removed refresh button, --min-instances 1, plan essential→basic, 5-min refresh). 2026-05-27: chart timeframe filter now uses real time-window + daily downsample for ≥30d windows (previously slice(-N) treated entries as days); seed always fetches full range (removed hasData edge case that silently skipped the most recent year); seed detects success-but-empty-rates chunks."
+    "lastMajorChanges": "2026-05-26: resilience hardening (self-rescheduling refresh + retry, Promise.race hard-timeout on all 3 metalpriceClient methods, per-chunk seed try/catch, 503+Retry-After gate, /health diagnostics, structured JSON logging, removed refresh button, --min-instances 1, plan essential→basic, 5-min refresh). 2026-05-27: chart timeframe filter uses real time-window + daily downsample for ≥30d windows; seed always fetches full range; seed detects success-but-empty-rates chunks; frontend now polls every 5min + on tab-focus (open tabs no longer go stale). 2026-05-28: removed the bogus -$0.15/lb adjustment; added calibration tracker (src/calibrationClient.ts) measuring drift vs Stooq/TradingEconomics references, surfaced on /health; --no-cpu-throttling (background timers were stalling on throttled CPU); GCS persistence (audit #1) shipped but DORMANT until DATA_BUCKET secret is set; /health persistence block. 2026-06-01: CI test gate (test job gates deploy — tsc + vitest); ticker bar is now an auto-scrolling marquee (gentle under reduced-motion, not frozen); NewsFeed duplicate-key bug fixed."
   },
 
   "stack": {
@@ -277,7 +277,7 @@
     "components": {
       "App": "Root; owns all state, data fetching, routing. Refreshing state and handleRefresh removed.",
       "Header": "Sticky top; brand, date, version. Refresh button removed.",
-      "TickerTape": "Horizontal scrollable strip; shows all 12 prices with % change",
+      "TickerTape": "Auto-scrolling marquee of all 12 prices + % change. Renders TWO identical copies inside .ticker-track; a translateX(-50%) keyframe loop makes the wrap seamless. .ticker-viewport is overflow:hidden + width:100% (the width:100% is load-bearing — a flex container with one max-content child can collapse to 0 width otherwise). Pauses on hover. Duration is set in the .ticker-track CSS rule (NOT inline) so the reduced-motion media query can override it: 60s normal, 90s under prefers-reduced-motion (gentle scroll, never frozen).",
       "TimeframeSelector": "7-button group: 1D/5D/30D/90D/1Y/3Y/ALL",
       "SectionLabel": "Section header with optional sub-text",
       "HeroCard": "Large card; 2-col grid (meta+price / sparkline); low/high stats; subLabel. Uses borderTop/Right/Bottom + borderLeft separately to avoid hover transition bug.",
@@ -420,7 +420,7 @@
   },
 
   "knownGotchas": [
-    "Cloud Run filesystem is ephemeral tmpfs — data/timeseries.json writes/reads work but vanish on every container restart. The seed re-runs on every cold start. Real persistence (GCS bucket via gcsfuse, or Firestore) is the remaining audit #1 fix.",
+    "Cloud Run filesystem is ephemeral tmpfs by default. GCS persistence (audit #1) is SHIPPED but DORMANT: the deploy mounts gs://$DATA_BUCKET at /mnt/data (gcsfuse, gen2) and sets DATA_DIR there ONLY when the DATA_BUCKET GitHub secret is set. Until then it runs ephemeral (re-seeds on restart). Check /health.persistence.mode = 'gcs' vs 'ephemeral'. To activate: create bucket, grant runtime SA roles/storage.objectAdmin, add DATA_BUCKET secret.",
     "AbortSignal.timeout in undici (Node fetch) can silently miss the response stream phase — a hung fetch never aborts. Every metalpriceClient method (fetchLatest/Timeframe/Change) now uses withHardTimeout() — a Promise.race against a manual setTimeout — as a guaranteed-rejection backstop.",
     "fetchTimeframe must have a generous timeout (60s AbortSignal + 70s manual backstop) — Cloud Run southamerica-east1 → metalpriceapi consistently exceeds 8s with 12 symbols × 365 days payload. Original 8s timeout (commit 026a2cb) silently broke the seed for 5 days.",
     "Seed chunks need per-chunk try/catch — a single failing chunk (network blip, !res.ok, hard-timeout) would otherwise propagate to the outer try/catch, leaving seedComplete=false and zero historical data.",
@@ -434,11 +434,17 @@
     "RSS HTML entities: &apos; &amp; &rsquo; &#8217; etc. must be decoded before rendering — JSX does not auto-decode string entities.",
     "canvas Sparkline: call paint() synchronously first; ResizeObserver should only repaint on genuine canvas.width changes to avoid double-fire cancellation loop.",
     "metalpriceapi rates are unitsPerUsd (inverted) — always compute displayValue as 1/rate for price assets.",
-    "XCU and NI display values have a -0.15/lb visual adjustment applied in fmt() and subLabel().",
+    "NO price adjustments. The old -$0.15/lb tweak on XCU/NI was REMOVED 2026-05-28 — measured vs Stooq/TradingEconomics it was pushing prices ~2.4% AWAY from market (real drift is <0.5%). Display raw metalpriceapi values. Drift is measured by the calibration tracker (/health.calibration), not corrected.",
     "ESM project (type:module) — all imports must use .js extension in TypeScript source.",
     "RegExpMatchArray[n] and RegExpExecArray[n] are string|undefined under noUncheckedIndexedAccess — use ?? '' guards.",
     "tweaks-panel.jsx loaded as second babel script — all exports attached to window via Object.assign.",
-    "/api/refresh clears caches before refetching — if upstream is slow, the gate will 503 between the clear and the refill. Mostly a debug-endpoint concern since the frontend button was removed."
+    "/api/refresh clears caches before refetching — if upstream is slow, the gate will 503 between the clear and the refill. Mostly a debug-endpoint concern since the frontend button was removed.",
+    "Cloud Run CPU throttling: with --min-instances 1, CPU is throttled between requests by default, which STALLS background setTimeout fetches (periodic refresh hung at the hard-timeout while manual /api calls succeeded in <1s). --no-cpu-throttling in the deploy fixes it. Symptom: /health.refresh.lastRefreshAt stays null while cacheWarm flips true via on-demand calls.",
+    "Ticker marquee + reduced-motion: do NOT disable the animation under prefers-reduced-motion (the user reported 'ticker not scrolling' because their OS had Reduce Motion on and the guard set animation:none). Instead scroll gently (90s vs 60s). Set --ticker-duration in the .ticker-track CSS rule, never inline — inline custom props outrank the media query and block the override.",
+    "Ticker viewport must have explicit width:100%. A flex container with a single max-content child + overflow:hidden can collapse to 0 width in some layout contexts, making the whole bar invisible despite rendering.",
+    "NewsFeed React keys: do NOT key on item.id — the server computes id as base64(link).slice(0,16), identical for every URL starting with 'https://www.', so React drops/duplicates cards and floods the console. Key on item.link + index instead.",
+    "CI test job: plain `npm ci` fails because the committed package-lock.json is intentionally not authoritative (reconciled per-platform at build time — see Dockerfile). The test job runs `npm install --package-lock-only` then `npm ci`, mirroring the Dockerfile builder stage.",
+    "Animations don't advance in backgrounded/unfocused browser tabs (incl. headless preview) — getComputedStyle(transform) stays at the start value. Verify via getAnimations()[0].playState/currentTime, not transform sampling."
   ],
 
   "deployment": {
@@ -508,14 +514,14 @@
 
   "outstandingAuditItems": [
     {
-      "id": "#3-partial",
-      "severity": "low",
-      "issue": "Periodic refresh now retries on failure; could add exponential backoff instead of fixed 60s."
+      "id": "#1-provisioning",
+      "severity": "medium",
+      "issue": "GCS persistence CODE is shipped but DORMANT — prod still runs ephemeral until the DATA_BUCKET GitHub secret is set (requires: create bucket in southamerica-east1, grant runtime SA roles/storage.objectAdmin, add secret). /health.persistence.mode confirms which mode is live."
     },
     {
-      "id": "#8",
-      "severity": "medium",
-      "issue": "SIGTERM persist flush has no timeout vs Cloud Run's 10s grace — only matters when #1 is fixed to use real persistence."
+      "id": "#3-partial",
+      "severity": "low",
+      "issue": "Periodic refresh retries on failure at a fixed 60s; could add exponential backoff."
     },
     {
       "id": "#10",
@@ -604,6 +610,36 @@
       "id": "boot-race",
       "resolved": "2026-05-26",
       "fix": "seedHistory now awaits the ready promise before its chunk loop. Prevents the seed from competing with the initial coalesceRefresh for network bandwidth at boot."
+    },
+    {
+      "id": "frontend-polling",
+      "resolved": "2026-05-27",
+      "fix": "App useEffect had empty deps — loadData ran once on mount, never again, so open tabs went stale despite the 5min server refresh. Added setInterval (prices 5min, news 15min) + a visibilitychange listener that refreshes on tab-focus, with cleanup handlers."
+    },
+    {
+      "id": "price-adjustment-removed",
+      "resolved": "2026-05-28",
+      "fix": "Removed the -$0.15/lb XCU/NI display adjustment — measured ~2.4% off vs market while real drift is <0.5%. Now display raw metalpriceapi values."
+    },
+    {
+      "id": "calibration-tracker",
+      "resolved": "2026-05-28",
+      "fix": "New src/calibrationClient.ts samples open public references (Stooq CSV for XAU/XAG/XPT/XPD/XCU/WTI, TradingEconomics scrape for NI) every 30min and records rolling diff vs our values. Surfaced on /health.calibration.bySymbol (samples, latest, meanDiffPct). Persisted to calibration.json. Measures drift, does not correct it."
+    },
+    {
+      "id": "cpu-throttling",
+      "resolved": "2026-05-28",
+      "fix": "Added --no-cpu-throttling to the deploy. Cloud Run was throttling CPU between requests on the min-instance, stalling the background periodic-refresh fetch (manual /api calls worked). Also READY_TIMEOUT 10s→30s, RETRY_INTERVAL 60s→15s."
+    },
+    {
+      "id": "ci-test-gate",
+      "resolved": "2026-06-01",
+      "fix": "Added a `test` job (Node 20, lockfile resync, tsc --noEmit, npm test) that the `deploy` job depends on via needs:. A red test now blocks the deploy. test/storage.test.ts added; smoke suite asserts the deploy flags (--no-cpu-throttling, --min-instances 1, --update-env-vars) and frontend regressions."
+    },
+    {
+      "id": "ticker-marquee",
+      "resolved": "2026-06-01",
+      "fix": "TickerTape converted to a seamless auto-scrolling marquee (two copies + translateX(-50%) loop). Reduced-motion scrolls gently (90s) instead of freezing; viewport pinned width:100% to prevent 0-width collapse. NewsFeed duplicate-key bug fixed in the same pass (key on item.link, not the colliding base64 id)."
     }
   ]
 }

@@ -411,7 +411,7 @@
         <div class="brand">DashSerious</div>
         <h1>Architecture Map</h1>
         <div class="brand-sub">
-          v1.2.4 · 2026-05-27 · Node 20 / Express 5 / React 18 · prod hardening
+          v1.2.4 · 2026-06-01 · Node 20 / Express 5 / React 18 · prod hardening
           pass
         </div>
       </div>
@@ -1391,12 +1391,59 @@ REFRESH_INTERVAL: 5min (METALPRICE_REFRESH_MINUTES=5)</pre
                 phase.
               </td>
             </tr>
+            <tr>
+              <td class="gold">polling</td>
+              <td class="muted">
+                <strong>2026-05-27:</strong> Frontend useEffect had empty deps —
+                open tabs never re-fetched. Added 5min/15min setInterval +
+                visibilitychange refresh.
+              </td>
+            </tr>
+            <tr>
+              <td class="gold">calibration</td>
+              <td class="muted">
+                <strong>2026-05-28:</strong> Removed the bogus -$0.15/lb tweak;
+                added a drift tracker (Stooq + TradingEconomics) surfaced on
+                /health.calibration. Measures, doesn't correct.
+              </td>
+            </tr>
+            <tr>
+              <td class="gold">cpu-throttle</td>
+              <td class="muted">
+                <strong>2026-05-28:</strong> --no-cpu-throttling — background
+                periodic-refresh fetches were stalling on throttled CPU while
+                manual /api calls worked.
+              </td>
+            </tr>
+            <tr>
+              <td class="gold">persistence</td>
+              <td class="muted">
+                <strong>2026-05-28:</strong> GCS gcsfuse mount (audit #1) +
+                bounded SIGTERM flush (#8). SHIPPED but DORMANT until
+                DATA_BUCKET secret is set — check /health.persistence.mode.
+              </td>
+            </tr>
+            <tr>
+              <td class="gold">ci-gate</td>
+              <td class="muted">
+                <strong>2026-06-01:</strong> deploy now gated behind a test job
+                (tsc + vitest). Red test blocks prod.
+              </td>
+            </tr>
+            <tr>
+              <td class="gold">ticker</td>
+              <td class="muted">
+                <strong>2026-06-01:</strong> Auto-scrolling marquee; scrolls
+                gently (90s) under Reduce Motion instead of freezing; viewport
+                pinned width:100%. NewsFeed duplicate-key bug fixed.
+              </td>
+            </tr>
           </table>
           <div class="highlight warn" style="margin-top: 12px">
-            <strong>Still open:</strong> #1 (Cloud Run tmpfs persistence is
-            fictitious — every restart re-seeds). #8 (SIGTERM persist race,
-            dormant until #1). #10 (hydrate isn't bounded). All low/medium
-            severity; design questions rather than urgent fixes.
+            <strong>Still open:</strong> #1-provisioning (GCS code shipped but
+            DORMANT — set the DATA_BUCKET secret to activate). #3-partial
+            (refresh retry could use backoff). #10 (hydrate isn't bounded). #11
+            (no frontend AbortController). All low/medium severity.
           </div>
         </div>
       </div>
@@ -1410,7 +1457,7 @@ REFRESH_INTERVAL: 5min (METALPRICE_REFRESH_MINUTES=5)</pre
           margin-top: 40px;
         "
       >
-        DashSerious v1.2.4 · generated 2026-05-27 · arch/dashboard-arch.html
+        DashSerious v1.2.4 · generated 2026-06-01 · arch/dashboard-arch.html
       </div>
     </div>
   </body>
