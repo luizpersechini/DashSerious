@@ -4,6 +4,30 @@ Every bug we've shipped to production. Each entry includes the symptom, root cau
 
 ---
 
+## 2026-06-01 — Unexpected Cloud Run cost from always-on instance billing
+
+**Symptom:** GCP cost spiked at the end of May (~R$24 net in May, billing chart flat until ~May 27 then jumping). A R$0.00 budget fired "100% reached." User correctly noted their usage hadn't changed.
+
+**Root cause:** NOT usage — a billing-MODE change I introduced. `--min-instances 1` (added 2026-05-26, to avoid cold-start re-seed) plus `--no-cpu-throttling` (added 2026-05-28, to fix background-timer stalls) put Cloud Run into **instance-based billing**: CPU allocated and billed 24/7 regardless of traffic. The cost SKU was literally "Services CPU (Instance-based billing) in southamerica-east1." Run-rate ~R$5–10/day (~R$150–300/mo if left running).
+
+**Fix:** reverted to `--min-instances 0` + `--cpu-throttling` (scale-to-zero, request-based billing → near-free). The original reason for the warm instance — avoiding the ~60s cold-start re-seed — is now moot because GCS persistence hydrates history from the bucket on boot. CRITICAL gotcha: `gcloud run deploy` retains unspecified flags, so you must set `--cpu-throttling` EXPLICITLY; merely removing `--no-cpu-throttling` leaves throttling off.
+
+**Lesson:** `--min-instances ≥ 1` and `--no-cpu-throttling` are real recurring spend, not a rounding error. Don't reach for them to paper over a cold-start UX problem when persistence solves the root cause. Also: a R$0 budget makes the budget alert meaningless (fires on any spend) — set a real number.
+
+**Detection recipe:**
+
+```bash
+# Cost reports → group by SKU. Watch for "Instance-based billing".
+# Or check the deployed service config:
+gcloud run services describe dashboard --region=southamerica-east1 \
+  --format='value(spec.template.metadata.annotations."autoscaling.knative.dev/minScale", spec.template.metadata.annotations."run.googleapis.com/cpu-throttling")'
+# Expect: minScale unset/0, cpu-throttling true (throttling ON = request billing).
+```
+
+**Files touched:** `.github/workflows/deploy-cloud-run.yml`, `test/smoke.test.ts`.
+
+---
+
 ## 2026-06-01 — Ticker "not rendering" was actually "not scrolling" under Reduce Motion
 
 **Symptom:** after the ticker was made an auto-scrolling marquee, the user reported it "not rendering" — first on localhost, then "not on prod." It looked identical to the old static bar.

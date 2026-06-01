@@ -176,17 +176,22 @@ describe.skipIf(!hasApiKey)("smoke: server surface", () => {
     expect(res.text).not.toMatch(/v\s*-\s*0\.15/);
   });
 
-  it("deploy workflow has --no-cpu-throttling (regression: CPU-throttle stall)", async () => {
-    // 2026-05-27 outage: Cloud Run's default CPU throttling on min-instance
-    // containers stalled every periodic refresh's fetch mid-stream. The flag
-    // must persist on every deploy. See qa/KNOWN-BUGS.md for the full story.
+  it("deploy workflow uses scale-to-zero + request billing (cost control 2026-06-01)", async () => {
+    // 2026-06-01: reverted the always-on instance (--min-instances 1 +
+    // --no-cpu-throttling) that was billing ~R$5-10/day via instance-based
+    // billing. GCS persistence now handles cold starts (hydrate from bucket,
+    // no re-seed), so scale-to-zero is safe. Note: --cpu-throttling must be
+    // set EXPLICITLY — gcloud retains unspecified flags, so merely dropping
+    // --no-cpu-throttling would NOT re-enable throttling.
     const fs = await import("node:fs/promises");
     const yml = await fs.readFile(
       ".github/workflows/deploy-cloud-run.yml",
       "utf8",
     );
-    expect(yml).toMatch(/--no-cpu-throttling/);
-    expect(yml).toMatch(/--min-instances\s+1/);
+    expect(yml).toMatch(/--min-instances\s+0/);
+    expect(yml).toMatch(/--cpu-throttling/);
+    expect(yml).not.toMatch(/--no-cpu-throttling/);
+    expect(yml).not.toMatch(/--min-instances\s+1/);
     expect(yml).toMatch(/--update-env-vars/); // must NOT regress to --set-env-vars (audit #2)
   });
 

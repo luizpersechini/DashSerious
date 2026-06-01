@@ -129,7 +129,7 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --service-account $RUNTIME_SA \
-            --min-instances 1 \
-            --no-cpu-throttling \
+            --min-instances 0 \
+            --cpu-throttling \
             $VOLUME_ARGS \
             --update-env-vars ${DATA_DIR_PREFIX}METALPRICE_API_KEY=$METALPRICE_API_KEY,METALPRICE_API_BASE=$METALPRICE_API_BASE,METALPRICE_PLAN=$METALPRICE_PLAN,METALPRICE_REFRESH_MINUTES=$METALPRICE_REFRESH_MINUTES,NEWS_API_KEY=$NEWS_API_KEY,REFRESH_TOKEN=$REFRESH_TOKEN,CORS_ALLOW_ORIGINS=$CORS_ALLOW_ORIGINS
