@@ -118,6 +118,31 @@
         animation: shimmer 1.4s ease-in-out infinite;
         border-radius: 2px;
       }
+      /* Auto-scrolling ticker marquee. The track holds two identical copies
+         of the items; translating by -50% lands copy #2 exactly where copy #1
+         started, so the loop is seamless. */
+      @keyframes ticker-scroll {
+        from {
+          transform: translateX(0);
+        }
+        to {
+          transform: translateX(-50%);
+        }
+      }
+      .ticker-track {
+        display: flex;
+        align-items: center;
+        width: max-content;
+        animation: ticker-scroll var(--ticker-duration, 60s) linear infinite;
+      }
+      .ticker-viewport:hover .ticker-track {
+        animation-play-state: paused;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .ticker-track {
+          animation: none;
+        }
+      }
     </style>
   </head>
   <body>
@@ -1790,90 +1815,95 @@
           return { m, latest, change };
         });
 
-        return (
-          <div
-            style={{
-              borderBottom: "1px solid var(--border)",
-              background: "var(--bg)",
-              padding: isMobile ? "0 16px" : "0 32px",
-              height: 36,
-              display: "flex",
-              alignItems: "center",
-              gap: 0,
-              overflowX: "auto",
-              scrollbarWidth: "none",
-            }}
-          >
-            {items.map(({ m, latest, change }, i) => (
-              <React.Fragment key={m.key}>
-                {i > 0 && (
-                  <span
-                    style={{
-                      color: "var(--border-strong)",
-                      margin: "0 16px",
-                      fontSize: 11,
-                    }}
-                  >
-                    |
-                  </span>
-                )}
-                <div
+        // Render one full set of items. A leading separator before every item
+        // (including the first) keeps spacing uniform across the loop seam.
+        const renderSet = (copy) =>
+          items.map(({ m, latest, change }) => (
+            <React.Fragment key={copy + ":" + m.key}>
+              <span
+                style={{
+                  color: "var(--border-strong)",
+                  margin: "0 16px",
+                  fontSize: 11,
+                }}
+              >
+                |
+              </span>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  flexShrink: 0,
+                }}
+              >
+                <span
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    flexShrink: 0,
+                    fontSize: 10,
+                    fontFamily: "var(--font-mono)",
+                    letterSpacing: "0.1em",
+                    color: m.cssColor,
+                    fontWeight: 500,
                   }}
                 >
+                  {m.symbol}
+                </span>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontFamily: "var(--font-mono)",
+                    fontWeight: 300,
+                    letterSpacing: "-0.02em",
+                    color: "var(--text)",
+                  }}
+                >
+                  {latest != null ? (
+                    m.fmt(latest)
+                  ) : (
+                    <span className="skel" style={{ width: 60, height: 12 }} />
+                  )}
+                </span>
+                {change && (
                   <span
                     style={{
                       fontSize: 10,
                       fontFamily: "var(--font-mono)",
-                      letterSpacing: "0.1em",
-                      color: m.cssColor,
-                      fontWeight: 500,
+                      color:
+                        change.direction === "up"
+                          ? "oklch(0.72 0.15 155)"
+                          : change.direction === "down"
+                            ? "oklch(0.72 0.15 20)"
+                            : "var(--muted)",
                     }}
                   >
-                    {m.symbol}
+                    {change.direction === "up" ? "+" : ""}
+                    {change.pct.toFixed(2)}%
                   </span>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontFamily: "var(--font-mono)",
-                      fontWeight: 300,
-                      letterSpacing: "-0.02em",
-                      color: "var(--text)",
-                    }}
-                  >
-                    {latest != null ? (
-                      m.fmt(latest)
-                    ) : (
-                      <span
-                        className="skel"
-                        style={{ width: 60, height: 12 }}
-                      />
-                    )}
-                  </span>
-                  {change && (
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontFamily: "var(--font-mono)",
-                        color:
-                          change.direction === "up"
-                            ? "oklch(0.72 0.15 155)"
-                            : change.direction === "down"
-                              ? "oklch(0.72 0.15 20)"
-                              : "var(--muted)",
-                      }}
-                    >
-                      {change.direction === "up" ? "+" : ""}
-                      {change.pct.toFixed(2)}%
-                    </span>
-                  )}
-                </div>
-              </React.Fragment>
-            ))}
+                )}
+              </div>
+            </React.Fragment>
+          ));
+
+        return (
+          <div
+            className="ticker-viewport"
+            style={{
+              borderBottom: "1px solid var(--border)",
+              background: "var(--bg)",
+              height: 36,
+              display: "flex",
+              alignItems: "center",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              className="ticker-track"
+              style={{ "--ticker-duration": "60s" }}
+            >
+              {/* Two identical copies → translateX(-50%) loops seamlessly. */}
+              {renderSet("a")}
+              {renderSet("b")}
+            </div>
           </div>
         );
       }
