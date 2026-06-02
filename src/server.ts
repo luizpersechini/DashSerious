@@ -157,6 +157,25 @@ const calibrationBySymbol = new Map<string, CalibrationSample[]>();
 let lastCalibrationAt: number | null = null;
 let lastCalibrationError: string | null = null;
 
+// ── COBALT OVERRIDE (temporary, added 2026-06-02) ───────────────────────────
+// metalpriceapi's XCO feed froze at $62,049/ton on 2026-01-09 (143 days flat)
+// while the LME/benchmark drifted to ~$56,300. We display the TradingEconomics
+// benchmark instead, refreshed each calibration cycle. IMPORTANT: the override
+// is applied ONLY to the live XCO timeseries point (what the dashboard charts);
+// caches['XCO'].usdPerMetricTon stays the RAW API value so the calibration
+// tracker keeps measuring the API's drift/un-freeze. If TradingEconomics goes
+// stale (>24h) we fall back to the raw API value so cobalt never blanks.
+// To remove this override: delete this block, the cobaltOverride assignment in
+// runCalibration, and the XCO branch in the timeseries push.
+let cobaltOverride: { value: number; ts: number } | null = null;
+const COBALT_OVERRIDE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+function cobaltOverrideFresh(): boolean {
+  return (
+    cobaltOverride !== null &&
+    Date.now() - cobaltOverride.ts < COBALT_OVERRIDE_MAX_AGE_MS
+  );
+}
+
 // Persistence diagnostics — surfaced via /health to confirm whether the GCS
 // mount is active and actually being written to.
 let storageStatus: {
@@ -358,8 +377,13 @@ async function refreshAllSymbols() {
     caches.set(symbol, base);
     lastFetchBySymbol.set(symbol, now);
 
-    // Record a display-value time series point
-    const display = getDisplayValue(symbol, base);
+    // Record a display-value time series point. For XCO, substitute the cobalt
+    // override (TradingEconomics benchmark) when fresh — cache stays RAW above
+    // so calibration keeps tracking the API's staleness. See COBALT OVERRIDE.
+    let display = getDisplayValue(symbol, base);
+    if (symbol === "XCO" && cobaltOverrideFresh()) {
+      display = cobaltOverride!.value;
+    }
     const arr = timeseriesBySymbol.get(symbol) ?? [];
     const lastPoint = arr[arr.length - 1];
     if (!lastPoint || now - lastPoint.t > 60 * 1000) {
@@ -666,6 +690,18 @@ app.get("/health", (_req, res) => {
         bySymbol: out,
       };
     })(),
+    cobaltOverride: {
+      // Temporary: cobalt displayed from the TradingEconomics benchmark because
+      // metalpriceapi's XCO froze on 2026-01-09. rawApiValue tracks the (stale)
+      // API value; active=false means we've fallen back to it (override stale).
+      active: cobaltOverrideFresh(),
+      source: "tradingeconomics",
+      overrideValue: cobaltOverride?.value ?? null,
+      overrideAgeMin: cobaltOverride
+        ? Math.round((Date.now() - cobaltOverride.ts) / 60000)
+        : null,
+      rawApiValue: caches.get("XCO")?.usdPerMetricTon ?? null,
+    },
   });
 });
 
@@ -777,6 +813,12 @@ async function runCalibration(): Promise<void> {
   for (const ref of REFERENCES) {
     const refData = refs[ref.symbol];
     if (!refData || refData.value == null) continue;
+    // Cobalt override: use the freshly-fetched TradingEconomics benchmark as
+    // the displayed XCO value (the API feed is stale). Set before the cache
+    // check so it updates even on cycles where the XCO cache isn't ready.
+    if (ref.symbol === "XCO") {
+      cobaltOverride = { value: refData.value, ts: now };
+    }
     const cache = caches.get(ref.symbol);
     if (!cache) continue;
     const ourValue = getValueInUnit(ref.symbol, cache, ref.unit);
