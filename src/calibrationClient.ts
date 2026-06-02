@@ -62,8 +62,11 @@ function parseInvestingPriceLast(body: string): number | null {
  * Unit text appears as either USD/T or USD/MT depending on the page.
  */
 function parseTradingEconomicsCommodity(body: string): number | null {
+  // The lead sentence varies by movement: "Nickel rose to X USD/T" (moving)
+  // vs "Cobalt traded flat at X USD/T" (flat). Match to|at|was/were/around
+  // before the number; the "USD/<unit>" suffix anchors it to the real quote.
   const m = body.match(
-    /to\s+([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]+)?)\s+USD\/[A-Z]+/,
+    /(?:to|at|was|were|around)\s+([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]+)?)\s+USD\/[A-Za-z]+/,
   );
   if (!m) return null;
   const cleaned = (m[1] ?? "").replace(/,/g, "");
@@ -74,10 +77,20 @@ function parseTradingEconomicsCommodity(body: string): number | null {
 // ── Source registry ─────────────────────────────────────────────────────────
 //
 // Each entry pairs an internal symbol with an open public reference.
-// Symbols not listed here are simply not tracked (e.g., XCO has no good free
-// reference, BRL/EUR/CAD are FX and not the target of this calibration).
+// Symbols not listed here are simply not tracked (BRL/EUR/CAD are FX and not
+// the target of this calibration). XCO is tracked because metalpriceapi's
+// cobalt feed is unreliable — it froze at $62,049/ton on 2026-01-09 while the
+// LME/benchmark drifted to ~$56,300; calibration surfaces that drift.
 
 export const REFERENCES: ReferenceSource[] = [
+  {
+    symbol: "XCO",
+    name: "Cobalt (TradingEconomics benchmark CFD)",
+    url: "https://tradingeconomics.com/commodity/cobalt",
+    source: "tradingeconomics",
+    unit: "USD/ton",
+    parse: parseTradingEconomicsCommodity,
+  },
   {
     symbol: "XCU",
     name: "Copper (COMEX HG futures)",

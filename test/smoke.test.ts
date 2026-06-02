@@ -145,7 +145,7 @@ describe.skipIf(!hasApiKey)("smoke: server surface", () => {
       // The set of symbols tracked by calibration. If you change REFERENCES
       // in src/calibrationClient.ts, update this assertion deliberately —
       // the calibration tracker is a contract surface now.
-      const tracked = ["XAU", "XAG", "XPT", "XPD", "XCU", "NI", "WTI"];
+      const tracked = ["XCO", "XAU", "XAG", "XPT", "XPD", "XCU", "NI", "WTI"];
       for (const sym of tracked) {
         expect(
           res.body.calibration.bySymbol[sym],
