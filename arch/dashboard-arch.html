@@ -411,7 +411,7 @@
         <div class="brand">DashSerious</div>
         <h1>Architecture Map</h1>
         <div class="brand-sub">
-          v1.2.4 · 2026-06-01 · Node 20 / Express 5 / React 18 · prod hardening
+          v1.2.4 · 2026-06-02 · Node 20 / Express 5 / React 18 · prod hardening
           pass
         </div>
       </div>
@@ -1452,6 +1452,16 @@ REFRESH_INTERVAL: 5min (METALPRICE_REFRESH_MINUTES=5)</pre
                 persistence makes cold starts cheap.
               </td>
             </tr>
+            <tr>
+              <td class="gold">cobalt</td>
+              <td class="muted">
+                <strong>2026-06-02:</strong> metalpriceapi XCO frozen at $62,049
+                since 2026-01-09 (143 days). Override displayed value with the
+                TradingEconomics benchmark (~$56,290), hydrated on boot +
+                applied at the serving layer (survives scale-to-zero). Raw API
+                still tracked on /health.calibration for un-freeze detection.
+              </td>
+            </tr>
           </table>
           <div class="highlight warn" style="margin-top: 12px">
             <strong>Still open:</strong> #3-partial (refresh retry could use
@@ -1471,7 +1481,7 @@ REFRESH_INTERVAL: 5min (METALPRICE_REFRESH_MINUTES=5)</pre
           margin-top: 40px;
         "
       >
-        DashSerious v1.2.4 · generated 2026-06-01 · arch/dashboard-arch.html
+        DashSerious v1.2.4 · generated 2026-06-02 · arch/dashboard-arch.html
       </div>
     </div>
   </body>

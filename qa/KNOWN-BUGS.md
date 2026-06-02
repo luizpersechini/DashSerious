@@ -4,6 +4,39 @@ Every bug we've shipped to production. Each entry includes the symptom, root cau
 
 ---
 
+## 2026-06-02 — Cobalt price stale (API frozen 143 days) + scale-to-zero broke the first override
+
+**Symptom:** cobalt had been showing $62,049/ton "for a long time." Investigation: metalpriceapi's XCO returned a byte-identical value (`0.5684846331`) every day since 2026-01-09 — 143 days frozen — while gold/others updated daily (366/366 distinct). Independent benchmarks said the real price was ~$56,300 (TradingEconomics CFD $56,290 "traded flat"; Westmetall LME cobalt ~$56,400). So our cobalt was both stale AND ~10% high.
+
+**Root cause:** metalpriceapi's cobalt is a low-frequency benchmark feed (only ~24 changes/year even when "working") that stopped updating after Jan 9. Unlike copper/nickel (within ~0.5% of market), cobalt is the unreliable symbol.
+
+**Fix:** override the displayed cobalt with the TradingEconomics benchmark; keep the raw API value tracked via the calibration tracker for un-freeze detection.
+
+**Second bug, found during the fix:** the first override deploy didn't engage — it relied on the background calibration `setTimeout` to set the override value, but **background timers don't run reliably under scale-to-zero + CPU throttling** (CPU is only allocated during a request). On a cold container the override stayed null and cobalt kept showing $62,049.
+
+**Final fix (cold-start-proof):**
+
+1. Hydrate `cobaltOverride` on boot from the last persisted XCO calibration sample (GCS) — available immediately, no timer needed.
+2. Apply the override at the SERVING layer in `/api/allmetals/timeseries` (last XCO point) — deterministic per-request, needs neither live cache nor a completed refresh.
+
+**Lesson (general):** under scale-to-zero, anything that must be correct on a cold container must be hydrated-on-boot, request-path-triggered, or applied-at-serve — NOT left to a background `setTimeout`.
+
+**Detection recipe:**
+
+```bash
+PROD=https://dashboard-1056503697671.southamerica-east1.run.app
+# 1. Displayed cobalt should be the benchmark (~$56k), not the stale $62,049:
+curl -s "$PROD/api/allmetals/timeseries?limit=2" | python3 -c "import json,sys; print('XCO displayed:', json.load(sys.stdin)['symbols']['XCO'][-1]['v'])"
+# 2. Override active + raw still tracked:
+curl -s "$PROD/health" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['cobaltOverride'])"
+# 3. Watch for the API un-freezing: /health.calibration.bySymbol.XCO.meanDiffPct
+#    shrinking toward 0 means metalpriceapi's cobalt started moving again.
+```
+
+**Files touched:** `src/calibrationClient.ts` (XCO reference + generalized TE parser), `src/server.ts` (cobaltOverride: boot hydration, calibration set, timeseries-write + serving-layer apply, /health field).
+
+---
+
 ## 2026-06-01 — Unexpected Cloud Run cost from always-on instance billing
 
 **Symptom:** GCP cost spiked at the end of May (~R$24 net in May, billing chart flat until ~May 27 then jumping). A R$0.00 budget fired "100% reached." User correctly noted their usage hadn't changed.
