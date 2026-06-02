@@ -234,6 +234,19 @@ const ready: Promise<void> = (async () => {
     console.log(
       `[storage] hydrated calibration for ${calibrationBySymbol.size} symbols`,
     );
+    // Seed the cobalt override from the most recent persisted XCO sample so it
+    // is available IMMEDIATELY on a cold start — the background calibration
+    // timer is unreliable under scale-to-zero + CPU throttling, so we can't
+    // wait for it. The first boot refresh (via the ready gate below) then
+    // writes the corrected XCO point. A fresh calibration cycle later updates it.
+    const xcoSamples = calibrationBySymbol.get("XCO");
+    const lastXco = xcoSamples?.[xcoSamples.length - 1];
+    if (lastXco && Date.now() - lastXco.ts < COBALT_OVERRIDE_MAX_AGE_MS) {
+      cobaltOverride = { value: lastXco.refValue, ts: lastXco.ts };
+      console.log(
+        `[cobalt] override hydrated from calibration: $${Math.round(lastXco.refValue)}/ton`,
+      );
+    }
   }
   await new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, READY_TIMEOUT_MS);
@@ -595,6 +608,16 @@ app.get("/api/allmetals/timeseries", (req, res) => {
   for (const [sym] of TRACKED) {
     const arr = timeseriesBySymbol.get(sym) ?? [];
     symbols[sym] = limit > 0 ? arr.slice(-limit) : arr.slice();
+  }
+  // Cobalt override at the serving layer: guarantee the CURRENT displayed
+  // value (the card = last point) is the benchmark even if a cold-start refresh
+  // never wrote an override point. Override ONLY the last point — historical
+  // points (incl. the stale $62k tail) are left intact; going-forward refresh
+  // points accumulate at the corrected level on their own.
+  if (cobaltOverrideFresh() && symbols["XCO"]?.length) {
+    const pts = symbols["XCO"]!;
+    const last = pts[pts.length - 1]!;
+    pts[pts.length - 1] = { t: last.t, v: cobaltOverride!.value };
   }
   return res.json({ success: true, symbols });
 });
