@@ -5,7 +5,7 @@
     "generated": "2026-06-01",
     "purpose": "Architecture reference for agents implementing new features",
     "repo": "https://github.com/luizpersechini/DashSerious",
-    "lastMajorChanges": "2026-05-26: resilience hardening (self-rescheduling refresh + retry, Promise.race hard-timeout on all 3 metalpriceClient methods, per-chunk seed try/catch, 503+Retry-After gate, /health diagnostics, structured JSON logging, removed refresh button, --min-instances 1, plan essential→basic, 5-min refresh). 2026-05-27: chart timeframe filter uses real time-window + daily downsample for ≥30d windows; seed always fetches full range; seed detects success-but-empty-rates chunks; frontend now polls every 5min + on tab-focus (open tabs no longer go stale). 2026-05-28: removed the bogus -$0.15/lb adjustment; added calibration tracker (src/calibrationClient.ts) measuring drift vs Stooq/TradingEconomics references, surfaced on /health; --no-cpu-throttling (background timers were stalling on throttled CPU); GCS persistence (audit #1) shipped but DORMANT until DATA_BUCKET secret is set; /health persistence block. 2026-06-01: CI test gate (test job gates deploy — tsc + vitest); ticker bar is now an auto-scrolling marquee (gentle under reduced-motion, not frozen); NewsFeed duplicate-key bug fixed."
+    "lastMajorChanges": "2026-05-26: resilience hardening (self-rescheduling refresh + retry, Promise.race hard-timeout on all 3 metalpriceClient methods, per-chunk seed try/catch, 503+Retry-After gate, /health diagnostics, structured JSON logging, removed refresh button, --min-instances 1, plan essential→basic, 5-min refresh). 2026-05-27: chart timeframe filter uses real time-window + daily downsample for ≥30d windows; seed always fetches full range; seed detects success-but-empty-rates chunks; frontend now polls every 5min + on tab-focus (open tabs no longer go stale). 2026-05-28: removed the bogus -$0.15/lb adjustment; added calibration tracker (src/calibrationClient.ts) measuring drift vs Stooq/TradingEconomics references, surfaced on /health; --no-cpu-throttling (background timers were stalling on throttled CPU); GCS persistence (audit #1) shipped but DORMANT until DATA_BUCKET secret is set; /health persistence block. 2026-06-01: CI test gate (test job gates deploy — tsc + vitest); ticker bar is now an auto-scrolling marquee (gentle under reduced-motion, not frozen); NewsFeed duplicate-key bug fixed; GCS persistence ACTIVATED (DATA_BUCKET set, /health.persistence.mode=gcs); then REVERTED the always-on instance (--min-instances 1 + --no-cpu-throttling) back to scale-to-zero + --cpu-throttling after it caused ~R$24 of instance-based-billing cost in May — persistence makes cold starts cheap so the warm instance was no longer needed."
   },
 
   "stack": {
@@ -420,7 +420,7 @@
   },
 
   "knownGotchas": [
-    "Cloud Run filesystem is ephemeral tmpfs by default. GCS persistence (audit #1) is SHIPPED but DORMANT: the deploy mounts gs://$DATA_BUCKET at /mnt/data (gcsfuse, gen2) and sets DATA_DIR there ONLY when the DATA_BUCKET GitHub secret is set. Until then it runs ephemeral (re-seeds on restart). Check /health.persistence.mode = 'gcs' vs 'ephemeral'. To activate: create bucket, grant runtime SA roles/storage.objectAdmin, add DATA_BUCKET secret.",
+    "Cloud Run filesystem is ephemeral tmpfs by default. GCS persistence (audit #1) is LIVE as of 2026-06-01 (bucket gs://dashserious-data, DATA_BUCKET secret set): deploy mounts it at /mnt/data (gcsfuse, gen2), DATA_DIR points there, timeseries.json + calibration.json persist. Cold starts hydrate the full 5yr history from the bucket in ms — NO re-seed. Verify via /health.persistence.mode='gcs'. If DATA_BUCKET is ever unset it falls back to ephemeral (re-seeds on restart).",
     "AbortSignal.timeout in undici (Node fetch) can silently miss the response stream phase — a hung fetch never aborts. Every metalpriceClient method (fetchLatest/Timeframe/Change) now uses withHardTimeout() — a Promise.race against a manual setTimeout — as a guaranteed-rejection backstop.",
     "fetchTimeframe must have a generous timeout (60s AbortSignal + 70s manual backstop) — Cloud Run southamerica-east1 → metalpriceapi consistently exceeds 8s with 12 symbols × 365 days payload. Original 8s timeout (commit 026a2cb) silently broke the seed for 5 days.",
     "Seed chunks need per-chunk try/catch — a single failing chunk (network blip, !res.ok, hard-timeout) would otherwise propagate to the outer try/catch, leaving seedComplete=false and zero historical data.",
@@ -439,7 +439,7 @@
     "RegExpMatchArray[n] and RegExpExecArray[n] are string|undefined under noUncheckedIndexedAccess — use ?? '' guards.",
     "tweaks-panel.jsx loaded as second babel script — all exports attached to window via Object.assign.",
     "/api/refresh clears caches before refetching — if upstream is slow, the gate will 503 between the clear and the refill. Mostly a debug-endpoint concern since the frontend button was removed.",
-    "Cloud Run CPU throttling: with --min-instances 1, CPU is throttled between requests by default, which STALLS background setTimeout fetches (periodic refresh hung at the hard-timeout while manual /api calls succeeded in <1s). --no-cpu-throttling in the deploy fixes it. Symptom: /health.refresh.lastRefreshAt stays null while cacheWarm flips true via on-demand calls.",
+    "Cloud Run billing modes are a real cost lever, NOT free knobs. --min-instances 1 + --no-cpu-throttling = instance-based billing (CPU allocated 24/7 regardless of traffic) ≈ R$5-10/day. We used them briefly (2026-05-26→06-01) to avoid cold-start re-seed and a background-timer stall, then REVERTED to --min-instances 0 + --cpu-throttling (scale-to-zero, request billing, near-free) once GCS persistence made cold starts cheap. Trade-off of scale-to-zero: first request after idle cold-starts (~few s) and its boot refresh may hit the 25s hard-timeout once (lastRefreshError shows it) — benign, history is already served from the bucket and the 15s retry warms the cache. The old background-timer-stall concern is moot at scale-to-zero (no always-on timer to stall).",
     "Ticker marquee + reduced-motion: do NOT disable the animation under prefers-reduced-motion (the user reported 'ticker not scrolling' because their OS had Reduce Motion on and the guard set animation:none). Instead scroll gently (90s vs 60s). Set --ticker-duration in the .ticker-track CSS rule, never inline — inline custom props outrank the media query and block the override.",
     "Ticker viewport must have explicit width:100%. A flex container with a single max-content child + overflow:hidden can collapse to 0 width in some layout contexts, making the whole bar invisible despite rendering.",
     "NewsFeed React keys: do NOT key on item.id — the server computes id as base64(link).slice(0,16), identical for every URL starting with 'https://www.', so React drops/duplicates cards and floods the console. Key on item.link + index instead.",
@@ -456,8 +456,10 @@
     "runtimeSA": "1056503697671-compute@developer.gserviceaccount.com",
     "deployFlags": [
       "--allow-unauthenticated",
-      "--min-instances 1 (keeps container warm; eliminates cold-start blank-chart window)",
-      "--update-env-vars (preserves manually-set env vars; replaces --set-env-vars which wiped them)"
+      "--min-instances 0 (scale-to-zero — pay per request, near-free. Reverted from 1 on 2026-06-01 to stop always-on instance-based CPU billing ~R$5-10/day; GCS persistence now covers cold starts so no blank-chart window)",
+      "--cpu-throttling (request-based billing; set EXPLICITLY because gcloud retains unspecified flags — dropping --no-cpu-throttling alone would NOT re-enable throttling)",
+      "--update-env-vars (preserves manually-set env vars; replaces --set-env-vars which wiped them)",
+      "--execution-environment=gen2 + --add-volume/--add-volume-mount (only when DATA_BUCKET secret is set — mounts gs://$DATA_BUCKET at /mnt/data via gcsfuse)"
     ],
     "secrets": [
       "GCP_SA_KEY_JSON",
@@ -629,12 +631,17 @@
     {
       "id": "ci-test-gate",
       "resolved": "2026-06-01",
-      "fix": "Added a `test` job (Node 20, lockfile resync, tsc --noEmit, npm test) that the `deploy` job depends on via needs:. A red test now blocks the deploy. test/storage.test.ts added; smoke suite asserts the deploy flags (--no-cpu-throttling, --min-instances 1, --update-env-vars) and frontend regressions."
+      "fix": "Added a `test` job (Node 20, lockfile resync, tsc --noEmit, npm test) that the `deploy` job depends on via needs:. A red test now blocks the deploy. test/storage.test.ts added; smoke suite asserts the deploy flags (scale-to-zero: --min-instances 0, --cpu-throttling, --update-env-vars) and frontend regressions."
     },
     {
       "id": "ticker-marquee",
       "resolved": "2026-06-01",
       "fix": "TickerTape converted to a seamless auto-scrolling marquee (two copies + translateX(-50%) loop). Reduced-motion scrolls gently (90s) instead of freezing; viewport pinned width:100% to prevent 0-width collapse. NewsFeed duplicate-key bug fixed in the same pass (key on item.link, not the colliding base64 id)."
+    },
+    {
+      "id": "cost-always-on-instance",
+      "resolved": "2026-06-01",
+      "fix": "May cost spike (~R$24, Cloud Run instance-based-billing CPU SKU) traced to --min-instances 1 (05-26) + --no-cpu-throttling (05-28) billing CPU 24/7. Reverted to --min-instances 0 + --cpu-throttling (scale-to-zero, request billing, near-free). Safe now because GCS persistence hydrates history on cold start — no re-seed, no blank charts. --cpu-throttling set explicitly (gcloud retains unspecified flags). Verified prod: scale-to-zero + persistence.mode=gcs + 5yr history hydrated."
     }
   ]
 }

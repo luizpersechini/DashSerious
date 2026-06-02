@@ -1235,9 +1235,11 @@ RSS: RFC 2822 (auto, no transform)</pre
                 <th>Why</th>
               </tr>
               <tr>
-                <td class="key">--min-instances 1</td>
+                <td class="key">--min-instances 0</td>
                 <td class="muted">
-                  Keeps container warm — no cold-start blank-chart window
+                  Scale-to-zero (near-free). Was 1 (always-warm) until
+                  2026-06-01 — reverted after instance-based billing cost
+                  ~R$5-10/day. GCS persistence covers cold starts now.
                 </td>
               </tr>
               <tr>
@@ -1410,17 +1412,19 @@ REFRESH_INTERVAL: 5min (METALPRICE_REFRESH_MINUTES=5)</pre
             <tr>
               <td class="gold">cpu-throttle</td>
               <td class="muted">
-                <strong>2026-05-28:</strong> --no-cpu-throttling — background
-                periodic-refresh fetches were stalling on throttled CPU while
-                manual /api calls worked.
+                <strong>2026-05-28:</strong> --no-cpu-throttling fixed a
+                background-timer stall on the warm instance.
+                <strong>REVERTED 2026-06-01</strong> (cost — see below).
               </td>
             </tr>
             <tr>
               <td class="gold">persistence</td>
               <td class="muted">
                 <strong>2026-05-28:</strong> GCS gcsfuse mount (audit #1) +
-                bounded SIGTERM flush (#8). SHIPPED but DORMANT until
-                DATA_BUCKET secret is set — check /health.persistence.mode.
+                bounded SIGTERM flush (#8).
+                <strong>ACTIVATED 2026-06-01</strong> — DATA_BUCKET set,
+                /health.persistence.mode=gcs, 5yr history hydrates from the
+                bucket on cold start.
               </td>
             </tr>
             <tr>
@@ -1438,12 +1442,22 @@ REFRESH_INTERVAL: 5min (METALPRICE_REFRESH_MINUTES=5)</pre
                 pinned width:100%. NewsFeed duplicate-key bug fixed.
               </td>
             </tr>
+            <tr>
+              <td class="gold">cost-revert</td>
+              <td class="muted">
+                <strong>2026-06-01:</strong> May spike (~R$24, Cloud Run
+                instance-based-billing CPU) was --min-instances 1 +
+                --no-cpu-throttling billing 24/7. Reverted to --min-instances 0
+                + --cpu-throttling (scale-to-zero, near-free). Safe because GCS
+                persistence makes cold starts cheap.
+              </td>
+            </tr>
           </table>
           <div class="highlight warn" style="margin-top: 12px">
-            <strong>Still open:</strong> #1-provisioning (GCS code shipped but
-            DORMANT — set the DATA_BUCKET secret to activate). #3-partial
-            (refresh retry could use backoff). #10 (hydrate isn't bounded). #11
-            (no frontend AbortController). All low/medium severity.
+            <strong>Still open:</strong> #3-partial (refresh retry could use
+            backoff). #10 (hydrate isn't bounded). #11 (no frontend
+            AbortController). All low severity. (#1 persistence + #8 flush are
+            resolved and live.)
           </div>
         </div>
       </div>
