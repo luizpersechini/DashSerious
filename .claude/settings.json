@@ -7,7 +7,7 @@
           {
             "type": "command",
             "if": "Bash(git push*)",
-            "command": "cmd=$(jq -r '.tool_input.command'); echo \"$cmd\" | grep -q 'git push' && { cd /home/user/DashSerious && npm run build && npm test; } || true",
+            "command": "input=$(cat); cmd=$(printf '%s' \"$input\" | jq -r '.tool_input.command // \"\"'); printf '%s' \"$cmd\" | grep -q 'git push' || exit 0; dir=$(printf '%s' \"$input\" | jq -r '.cwd // \".\"'); cd \"$dir\" && repo=$(git rev-parse --show-toplevel) && cd \"$repo\" && npm run build && npm test || { echo 'QA failed — blocking git push' >&2; exit 2; }",
             "timeout": 120,
             "statusMessage": "Running QA (build + tests) before push..."
           }
