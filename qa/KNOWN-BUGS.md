@@ -4,6 +4,40 @@ Every bug we've shipped to production. Each entry includes the symptom, root cau
 
 ---
 
+## 2026-08 — Point cap silently evicted years of history (1Y chart → ~8 bars, all "today")
+
+**Symptom:** 1Y/3Y/ALL charts collapsed to a handful of bars all dated today. Oscillated: appeared, vanished for weeks, came back — which made it look "fixed" when it wasn't.
+
+**Root cause:** `MAX_SERIES_POINTS = 4000` was enforced with a naive `arr.splice(0, arr.length - 4000)` — which always discards the **oldest** points. At the 5-min refresh cadence (~288 pts/day), a warm container fills all 4000 slots with recent intraday in ~2 weeks and evicts years of daily history one point at a time. Then it persists the truncated series to GCS, and every subsequent boot hydrates the damage. Four cap sites: the FX / oil / metals live-push blocks + the seed's final pass.
+
+**Why it oscillated:** scale-to-zero (Jun 1) kept containers short-lived — they died before accumulating 4000 intraday, and each boot re-seeded, so the bug hid. It resurfaced whenever a container stayed warm long enough. Prod was measured at **3,908/4,000 with only 1,834 distinct days** — hours from evicting again.
+
+**Fix:** `compactSeries()` — keep full intraday for `INTRADAY_RETENTION_DAYS` (3), collapse everything older to the last point per UTC day (mirrors the frontend's own >30d daily downsample), **then** apply the cap. The cap now only ever trims the oldest _daily_ points, so 4000 slots ≈ 8.5 years of real history. Applied at all 4 cap sites AND on boot hydration (so a truncated file already in GCS gets compacted, freeing slots for the seed to refill history).
+
+**Verified against real prod data:** simulating a 60-day warm flood (17,280 intraday pts, 4× the cap) preserved every symbol's history back to 2021-08-11 and the series _shrank_ to ~3,550. The old cap would have wiped everything but the last ~2 weeks.
+
+**Lesson (general):** a _count_ cap on a series with mixed granularity always evicts whichever granularity is oldest — for a mixed daily+intraday series that's the history. Cap by **retention policy** (collapse old fine-grained points first), never by raw count.
+
+**Detection recipe:**
+
+```bash
+PROD=https://dashboard-1056503697671.southamerica-east1.run.app
+curl -s "$PROD/api/allmetals/timeseries" | python3 -c "
+import json,sys,datetime as dt
+d=json.load(sys.stdin)
+for s in ['XAU','XCU','NI']:
+    p=d['symbols'][s]; days=len({int(x['t']//86400000) for x in p})
+    o=dt.datetime.fromtimestamp(p[0]['t']/1000,dt.UTC).date()
+    print(f'{s}: {len(p)} pts, {days} distinct days, oldest {o}')
+"
+# HEALTHY: oldest ≈ 5 years back, distinct-days ≈ pts (mostly daily), pts well under 4000.
+# BROKEN:  oldest = today/this week, distinct-days << pts (all intraday), pts pinned at ~4000.
+```
+
+**Files touched:** `src/server.ts` (`compactSeries`, 4 cap sites, boot hydration), `test/compact.test.ts` (regression: 5000 intraday must not evict the 365-day-ago point).
+
+---
+
 ## 2026-06-02 — Cobalt price stale (API frozen 143 days) + scale-to-zero broke the first override
 
 **Symptom:** cobalt had been showing $62,049/ton "for a long time." Investigation: metalpriceapi's XCO returned a byte-identical value (`0.5684846331`) every day since 2026-01-09 — 143 days frozen — while gold/others updated daily (366/366 distinct). Independent benchmarks said the real price was ~$56,300 (TradingEconomics CFD $56,290 "traded flat"; Westmetall LME cobalt ~$56,400). So our cobalt was both stale AND ~10% high.
