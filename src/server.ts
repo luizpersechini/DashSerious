@@ -127,6 +127,84 @@ function compactSeries(arr: SeriesPoint[]): SeriesPoint[] {
   return out;
 }
 
+/**
+ * History-depth health signal — the monitoring counterpart to compactSeries.
+ *
+ * The 2026-08 point-cap bug silently evicted years of history and stayed
+ * invisible because nothing measured "how far back does the series go". This
+ * makes that axis observable per symbol and yields one explicit boolean.
+ *
+ * Grading, per symbol: expected span = min(seed target [SEED_DEPTH_DAYS,
+ * default 5y], the symbol's known upstream floor). Some symbols genuinely
+ * have shorter history on metalpriceapi (XCO from 2024-05, BRENT/WTI from
+ * 2022-12) — HISTORY_FLOORS pins those so they aren't false alarms. A symbol
+ * is ok if its actual span >= HISTORY_MIN_FRACTION (80%) of expected.
+ * `history.ok` is the single boolean the smoke tests assert.
+ */
+const HISTORY_MIN_FRACTION = 0.8;
+// Symbols whose upstream history is genuinely shorter than the seed target.
+// Values = the earliest date metalpriceapi actually returns for them.
+const HISTORY_FLOORS: Record<string, string> = {
+  XCO: "2024-05-31",
+  BRENT: "2022-12-11",
+  WTI: "2022-12-11",
+};
+function computeHistoryHealth() {
+  const now = Date.now();
+  const seedTargetMs = config.seedDepthDays * DAY_MS;
+  const bySymbol: Record<
+    string,
+    {
+      points: number;
+      distinctDays: number;
+      oldest: string | null;
+      spanDays: number;
+      expectedMinDays: number;
+      ok: boolean;
+    }
+  > = {};
+  let allOk = true;
+  const failing: string[] = [];
+  for (const [sym] of TRACKED) {
+    const arr = timeseriesBySymbol.get(sym) ?? [];
+    const first = arr[0];
+    const spanDays = first ? Math.floor((now - first.t) / DAY_MS) : 0;
+    const distinctDays = new Set(arr.map((p) => Math.floor(p.t / DAY_MS))).size;
+    // Expected: seed target, but capped at the symbol's known upstream floor.
+    const floorIso = HISTORY_FLOORS[sym];
+    const floorSpanDays = floorIso
+      ? Math.floor((now - Date.parse(floorIso)) / DAY_MS)
+      : Infinity;
+    const expectedDays = Math.min(seedTargetMs / DAY_MS, floorSpanDays);
+    const expectedMinDays = Math.floor(expectedDays * HISTORY_MIN_FRACTION);
+    // A healthy series is (a) deep enough and (b) mostly daily, not intraday
+    // bloat: distinctDays should be a large fraction of points. If points >>
+    // distinctDays the cap is being filled by intraday and history is at risk.
+    const ok = arr.length > 0 && spanDays >= expectedMinDays;
+    if (!ok) {
+      allOk = false;
+      failing.push(sym);
+    }
+    bySymbol[sym] = {
+      points: arr.length,
+      distinctDays,
+      oldest: first ? new Date(first.t).toISOString().slice(0, 10) : null,
+      spanDays,
+      expectedMinDays,
+      ok,
+    };
+  }
+  return {
+    ok: allOk,
+    failing,
+    seedTargetDays: config.seedDepthDays,
+    minFraction: HISTORY_MIN_FRACTION,
+    capPoints: MAX_SERIES_POINTS,
+    intradayRetentionDays: INTRADAY_RETENTION_DAYS,
+    bySymbol,
+  };
+}
+
 type NewsCache = { items: NewsItem[]; fetchedAt: number };
 const NEWS_CACHE_TTL_MS = 30 * 60 * 1000;
 const NEWS_MAX_AGE_MS = 48 * 60 * 60 * 1000; // keep articles for 48 h
@@ -682,6 +760,11 @@ app.get("/health", (_req, res) => {
     if (arr[arr.length - 1]!.t > newestPoint)
       newestPoint = arr[arr.length - 1]!.t;
   }
+  // History-depth guard (added 2026-08 after the point-cap eviction bug).
+  // The aggregate oldestPoint above is a MIN across symbols, so one symbol
+  // losing its history stays invisible as long as any other keeps it. This
+  // block is per-symbol and yields an explicit boolean the smoke tests assert.
+  const history = computeHistoryHealth();
   return res.json({
     ok: true,
     cacheWarm: caches.size === TRACKED.length,
@@ -707,6 +790,7 @@ app.get("/health", (_req, res) => {
       newestPoint:
         newestPoint === -Infinity ? null : new Date(newestPoint).toISOString(),
     },
+    history,
     persistence: {
       // mode: "gcs" once DATA_BUCKET is provisioned (DATA_DIR set + writable),
       // "ephemeral" otherwise. lastPersistAt confirms writes are landing.

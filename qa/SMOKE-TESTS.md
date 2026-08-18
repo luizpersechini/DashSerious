@@ -244,8 +244,36 @@ curl -s -o /dev/null -w "HTTP %{http_code} %{time_total}s\n" $PROD/
 
 ---
 
+## 11. History depth is intact (the axis the 2026-08 cap bug broke) — RUN AFTER EVERY DEPLOY
+
+This is the automated guard for the point-cap history-eviction bug. `/health.history` grades every symbol's series depth against its expected floor and yields one boolean. Unlike the aggregate `data.oldestPoint` (a MIN across symbols — one symbol can lose its history invisibly), this is per-symbol.
+
+```bash
+curl -s "$PROD/health" | python3 -c "
+import json,sys
+h=json.load(sys.stdin)['history']
+print('history.ok =', h['ok'], '  failing =', h['failing'])
+for s,v in h['bySymbol'].items():
+    flag='OK ' if v['ok'] else 'BAD'
+    print(f'  {flag} {s:6s} pts={v[\"points\"]:5d} days={v[\"distinctDays\"]:5d} span={v[\"spanDays\"]:5d}d (min {v[\"expectedMinDays\"]}) oldest={v[\"oldest\"]}')
+assert h['ok'], 'HISTORY DEPTH REGRESSION: ' + ','.join(h['failing'])
+"
+```
+
+**Expected:** `history.ok = True`, `failing = []`. XAU/XAG/XPT/XPD/XCU/NI/BRL/EUR/CAD span ≈ 1,800d (5y); XCO/BRENT/WTI shorter (their upstream floors) but still `OK`. `points` should be only modestly above `distinctDays` (mostly daily + ≤3 days intraday) and well under 4,000.
+
+**Failure signatures:**
+
+- `ok=False`, some symbol `span` tiny with `oldest` = this week → **history evicted**. Check that `compactSeries` is still applied at all cap sites (`grep -n compactSeries src/server.ts` → live push ×3, seed pass, boot hydration).
+- `points >> distinctDays` and `points` creeping toward 4,000 → intraday is filling the cap; compaction isn't running (retention window may have been widened, or a new push site bypasses `compactSeries`).
+- One symbol `BAD` while others `OK` → that symbol's seed chunk failed silently or its `HISTORY_FLOORS` entry is wrong. Check `data.totalFailedChunks`.
+
+**Why this exists:** the bug oscillated for weeks and hid behind re-seeding cold starts. Every "silent degradation" bug we fix must get a health signal for its axis — a fix without a signal is a patch that relies on a human remembering to check.
+
+---
+
 ## How to use this file
 
-For a typical change, run §1, §2, §6. For data-flow changes, also §3 and §5. For news changes, §8. For deploy changes, all of the above.
+For a typical change, run §1, §2, §6. For data-flow changes, also §3, §5 and **§11**. For news changes, §8. For deploy changes, all of the above. **§11 is mandatory after every production deploy** regardless of what changed.
 
 If anything fails, **do not push.** Investigate, fix, re-run. If the failure is in production after your push, roll forward with another commit — don't leave broken state.

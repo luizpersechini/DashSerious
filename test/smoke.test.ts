@@ -168,6 +168,39 @@ describe.skipIf(!hasApiKey)("smoke: server surface", () => {
     },
   );
 
+  it.skipIf(!hasApiKey)(
+    "/health exposes per-symbol history-depth block (regression: 2026-08 cap eviction)",
+    async () => {
+      // The 2026-08 point-cap bug evicted years of history and stayed invisible
+      // because nothing measured series depth. This block makes it observable.
+      // Shape is asserted here (CI has no seeded history so ok may be false);
+      // the `history.ok === true` assertion lives in the post-deploy prod smoke
+      // check (qa/SMOKE-TESTS.md §11) where a seeded series actually exists.
+      const res = await request(app).get("/health");
+      expect(res.body).toHaveProperty("history");
+      const h = res.body.history;
+      expect(typeof h.ok).toBe("boolean");
+      expect(Array.isArray(h.failing)).toBe(true);
+      expect(h.capPoints).toBe(4000);
+      expect(h.intradayRetentionDays).toBe(3);
+      expect(h.seedTargetDays).toBeGreaterThan(0);
+      // Every tracked symbol must be graded.
+      for (const sym of Object.values(ROUTE_TO_SYMBOL)) {
+        expect(h.bySymbol[sym], `history missing for ${sym}`).toBeDefined();
+        const s = h.bySymbol[sym];
+        expect(typeof s.ok).toBe("boolean");
+        expect(typeof s.spanDays).toBe("number");
+        expect(typeof s.expectedMinDays).toBe("number");
+        expect(typeof s.distinctDays).toBe("number");
+      }
+      // Symbols with a known-shorter upstream floor must have a REDUCED
+      // expectation (not the full 5y), or they'd be permanent false alarms.
+      const fullExpected = h.bySymbol.XAU.expectedMinDays;
+      expect(h.bySymbol.XCO.expectedMinDays).toBeLessThan(fullExpected);
+      expect(h.bySymbol.BRENT.expectedMinDays).toBeLessThan(fullExpected);
+    },
+  );
+
   it("frontend NO LONGER applies the -0.15/lb adjustment to Cu/Ni (regression)", async () => {
     const res = await request(app).get("/");
     // The adjustment was measured wrong vs Stooq/Investing.com and removed.

@@ -18,6 +18,8 @@ Every bug we've shipped to production. Each entry includes the symptom, root cau
 
 **Lesson (general):** a _count_ cap on a series with mixed granularity always evicts whichever granularity is oldest — for a mixed daily+intraday series that's the history. Cap by **retention policy** (collapse old fine-grained points first), never by raw count.
 
+**Second lesson — why it went undetected for months:** we had a dozen `/health` diagnostics and **none measured series depth**, the one axis that broke. The aggregate `data.oldestPoint` was a MIN across symbols, so any single symbol keeping old data made the whole thing look healthy. And it self-healed on every cold start (re-seed), which erased the evidence. Rule adopted: **every "silent degradation" bug we fix must get a per-symbol health signal for its axis + a post-deploy smoke assertion.** A fix without a signal is a patch that relies on a human remembering the recipe. Hence `/health.history` + SMOKE-TESTS §11 (mandatory after every deploy).
+
 **Detection recipe:**
 
 ```bash
@@ -34,7 +36,7 @@ for s in ['XAU','XCU','NI']:
 # BROKEN:  oldest = today/this week, distinct-days << pts (all intraday), pts pinned at ~4000.
 ```
 
-**Files touched:** `src/server.ts` (`compactSeries`, 4 cap sites, boot hydration), `test/compact.test.ts` (regression: 5000 intraday must not evict the 365-day-ago point).
+**Files touched:** `src/server.ts` (`compactSeries`, 4 cap sites, boot hydration; `computeHistoryHealth` → `/health.history`), `test/compact.test.ts` (regression: 5000 intraday must not evict the 365-day-ago point), `test/smoke.test.ts` (`/health.history` shape), `qa/SMOKE-TESTS.md` §11 + `qa/CHECKLIST.md` (post-deploy `history.ok` gate).
 
 ---
 
