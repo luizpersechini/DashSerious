@@ -83,7 +83,49 @@ const caches = new Map<string, MetalCache>();
 const lastFetchBySymbol = new Map<string, number>();
 type SeriesPoint = { t: number; v: number };
 const timeseriesBySymbol = new Map<string, SeriesPoint[]>();
-const MAX_SERIES_POINTS = 4000; // ~10 years of daily data
+const MAX_SERIES_POINTS = 4000; // ~10 years of daily data (after compaction)
+// Keep full intraday resolution only for this many recent days; older points
+// are collapsed to one-per-UTC-day. This is what makes MAX_SERIES_POINTS mean
+// "years of history" instead of "~2 weeks of 5-min intraday".
+// Budget math at 5-min cadence (288 pts/day): 3 days ≈ 864 intraday slots,
+// leaving ~3,100 of the 4,000 cap for daily history ≈ 8.5 years. The frontend
+// downsamples anything >30d to daily anyway, so >3d intraday is never shown at
+// full resolution on any chart.
+const INTRADAY_RETENTION_DAYS = 3;
+const DAY_MS = 86_400_000;
+
+/**
+ * Compact a series so the point cap can never evict old daily history.
+ *
+ * BUG THIS FIXES (2026-08): the cap was a naive `splice(0, len - MAX)` that
+ * always dropped the OLDEST points. With a 5-min refresh (~288 pts/day) a
+ * warm container filled the 4000 slots with recent intraday in ~2 weeks and
+ * silently ate years of daily history — then persisted the truncated series
+ * to GCS. Symptom: 1Y chart showing ~8 bars all "today".
+ *
+ * Strategy: points newer than INTRADAY_RETENTION_DAYS keep every sample;
+ * everything older collapses to the LAST point of each UTC day (matches the
+ * frontend's own >30d daily downsample). Only after that do we apply the cap
+ * — which then trims the oldest DAILY points, i.e. ~10 years of real history.
+ */
+function compactSeries(arr: SeriesPoint[]): SeriesPoint[] {
+  if (arr.length === 0) return arr;
+  const cutoff = Date.now() - INTRADAY_RETENTION_DAYS * DAY_MS;
+  const daily = new Map<number, SeriesPoint>(); // utcDay -> last point that day
+  const recent: SeriesPoint[] = [];
+  for (const p of arr) {
+    if (p.t >= cutoff) {
+      recent.push(p);
+    } else {
+      // later points overwrite earlier ones → keeps the last sample per day
+      daily.set(Math.floor(p.t / DAY_MS), p);
+    }
+  }
+  const out = [...daily.values(), ...recent].sort((a, b) => a.t - b.t);
+  if (out.length > MAX_SERIES_POINTS)
+    out.splice(0, out.length - MAX_SERIES_POINTS);
+  return out;
+}
 
 type NewsCache = { items: NewsItem[]; fetchedAt: number };
 const NEWS_CACHE_TTL_MS = 30 * 60 * 1000;
@@ -217,8 +259,15 @@ const ready: Promise<void> = (async () => {
   );
   // Hydrate from disk first so charts aren't empty during the initial fetch window.
   const h = await hydrateTimeseries(timeseriesBySymbol);
-  if (h.loaded)
+  if (h.loaded) {
     console.log(`[storage] hydrated ${h.symbols} symbols from disk`);
+    // Compact on load: a persisted file written by the OLD naive cap may be
+    // bloated with intraday (which is what evicted the history). Compacting
+    // here frees the slots so the seed below can refill the daily history
+    // instead of having it re-evicted by the cap.
+    for (const [sym, arr] of timeseriesBySymbol)
+      timeseriesBySymbol.set(sym, compactSeries(arr));
+  }
   // Restore calibration rolling window so the mean-diff numbers accumulate
   // across restarts instead of resetting each deploy.
   const cal = await hydrateJson<{
@@ -350,9 +399,7 @@ async function refreshAllSymbols() {
       const lastPoint = arr[arr.length - 1];
       if (!lastPoint || now - lastPoint.t > 60 * 1000) {
         arr.push({ t: now, v: unitsPerUsd });
-        if (arr.length > MAX_SERIES_POINTS)
-          arr.splice(0, arr.length - MAX_SERIES_POINTS);
-        timeseriesBySymbol.set(symbol, arr);
+        timeseriesBySymbol.set(symbol, compactSeries(arr));
       }
       continue;
     }
@@ -370,9 +417,7 @@ async function refreshAllSymbols() {
       const lastPoint = arr[arr.length - 1];
       if (!lastPoint || now - lastPoint.t > 60 * 1000) {
         arr.push({ t: now, v: usdPerBarrel });
-        if (arr.length > MAX_SERIES_POINTS)
-          arr.splice(0, arr.length - MAX_SERIES_POINTS);
-        timeseriesBySymbol.set(symbol, arr);
+        timeseriesBySymbol.set(symbol, compactSeries(arr));
       }
       continue;
     }
@@ -401,9 +446,7 @@ async function refreshAllSymbols() {
     const lastPoint = arr[arr.length - 1];
     if (!lastPoint || now - lastPoint.t > 60 * 1000) {
       arr.push({ t: now, v: display });
-      if (arr.length > MAX_SERIES_POINTS)
-        arr.splice(0, arr.length - MAX_SERIES_POINTS);
-      timeseriesBySymbol.set(symbol, arr);
+      timeseriesBySymbol.set(symbol, compactSeries(arr));
     }
   }
 }
@@ -1060,7 +1103,10 @@ scheduleNextCalibration(30 * 1000);
       );
     }
 
-    // Sort, dedupe by day-timestamp, and cap to MAX_SERIES_POINTS.
+    // Sort, dedupe exact-timestamp collisions, then compact (collapse old
+    // intraday to daily) and cap — compactSeries guarantees the cap can only
+    // ever trim the oldest DAILY points, never eat history to make room for
+    // recent intraday.
     for (const [sym, arr] of timeseriesBySymbol) {
       arr.sort((a, b) => a.t - b.t);
       const dedup: SeriesPoint[] = [];
@@ -1072,9 +1118,7 @@ scheduleNextCalibration(30 * 1000);
           prevT = p.t;
         }
       }
-      if (dedup.length > MAX_SERIES_POINTS)
-        dedup.splice(0, dedup.length - MAX_SERIES_POINTS);
-      timeseriesBySymbol.set(sym, dedup);
+      timeseriesBySymbol.set(sym, compactSeries(dedup));
     }
 
     const sampleLen = [...timeseriesBySymbol.values()][0]?.length ?? 0;
@@ -1117,7 +1161,7 @@ registerGracefulPersist(async () => {
   await Promise.allSettled([persistTimeseries(), persistCalibration()]);
 });
 
-export { app, ready };
+export { app, ready, compactSeries };
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 if (process.env.NODE_ENV !== "test") {
